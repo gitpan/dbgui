@@ -1,0 +1,186 @@
+NAME
+    DBGUI - a Sybase database server graphical interface.
+
+DESCRIPTION
+    DBGUI features:
+
+        Perform any SQL command.
+
+        Save the SQL results to a file.
+
+        Perform incremental or standard searches or the SQL results.
+
+        Keep a history of _all_ SQL commands and parameters.
+
+        Sort (normal, numerical and reverse) on any column of the SQL results.
+
+        Print the SQL results to a printer.
+
+        Quick command line clear and restore for easy command line generation/pasting.
+
+        "Clone" the results to a new display window for comparisons etc.
+
+        Utilize the SYBASE libraries or isql/sqsh binaries for the queries.
+
+        Maintain four complete configuration "snapshots" for easy retrieval.
+
+        Reload the last set of parameters on startup.
+
+        Interactively enable and disable any or all of three different command lines for
+        execution. All of the 'active' command lines are concatenated, therefore the three
+        command entry lines can be used to quickly eliminate/add command parameters to an
+        existing command.
+
+        Display the column data type in each column header.
+
+        Display the column data width in each column header.
+
+        Solicit and quickly popup a list of the system datatypes.
+
+        Colored busy indicator (red/green) to indicate if the DBGUI is waiting on results
+        from the DB server.
+
+        The date/time of command execution is captured in the title bar.
+
+        More probably.... :-)
+
+PREREQUISITES
+    This script requires the following Perl Modules:
+
+        `Tk Toolkit'
+
+        `Sybperl'
+        
+        `Sort::Fields'
+
+        `Tk::HistEntry'
+
+        `Tk::PrintDialog'
+
+    CPAN/Administrative Fun/Educational
+
+
+The Buttons/HistEntrys:
+(From left to right, top to bottom)
+
+Server entry - Allows the user to enter or select the DB server to connect with.  If a new 
+   server name is entered into the entry, the server is added to the server history list. 
+   A history of 60 entries is maintained.
+
+Username entry - Allows the user to enter or select the Sybase user to connect with.  
+   If a new user name is entered into the entry, the user is added to the user history list. 
+   A history of 60 entries is maintained.
+
+Password entry - Allows the user to enter or select the password to connect with.  If a new 
+   password is entered into the entry, the server is added to the password history list. 
+   A history of 60 entries is maintained.
+
+Use DB entry - Allows the user to enter or select the database to connect to once a 
+   connection is established to the server.  If a new database is entered into the entry, 
+   the database is added to the database history list. 
+   A history of 60 entries is maintained.
+
+Max Rows entry - Allows the user to set the maximum rowcount for the db query/command.  
+   If 0 is used, no max rowcount will be set.
+
+Snapshot slider - Allows the user to select and load "snapshots" of command parameters.  
+   Four snapshots can be saved.  Snapshot 0 is automatically loaded and is always 
+   configured to be the command configuration last used when dbgui was exited.   If the 
+   user has several commands on different servers he has to call frequently, a snapshot 
+   can be made once the command parameters are entered, and can be instantly retrieved by
+   selecting that particular snapshot at any time.
+
+Busy LED - This circular button changes color to indicate a busy or idle state.
+
+Method menubutton - Allows the user to enter or select the method which is used to interface 
+   with the database server.  "Sybase" uses the sybase libraries API.  Isql and Sqsh are 
+   binaries that are called to execute the command.  The output of these binaries is
+   less elegant and informative than using the sybase libraries.  The isql and sqsh 
+   options were actually originally implemented to prove to doubting co-workers who 
+   tended to blame dbgui if unexpected results were returned from a query.  It worked :-)
+   
+C buttons - The "C" buttons (there is one for each command line) is used to quickly clear
+   the associated command entry before data is entered or pasted.  These were implemented 
+   because I was constantly copying a command to the X clipboard from another window and
+   wanting to paste the command into the dbgui command entries.  Since these entries usually
+   had a previous command already in them, I would have to paste the command in, and then
+   delete old command from the command entry...   a real pain...   Now with a click of mouse
+   button one the command line is cleared and ready to be written into.  Mouse button
+   three will restore the command entry if you have accidentally cleared the wrong command
+   one.
+   
+Sel buttons - The Sel buttons sets the associated command entry as 'active'.  If a command
+   entry is not active, it wont be executed, and the command entry text will be grayed out.
+   If a command entry is set to active the command line will be executed when the execute 
+   button is pressed or return is entered.  Note - all three command entries operate 
+   independently, you can have one active or all three.  If more than one command entry is
+   active, each of the active command entry strings are concatenated together to form a 
+   single sql command before executing.   This allows quick an easy command parameter 
+   modifications by putting command options on different command entry lines and enabling
+   or disabling the entries to change the sql command to execute. 
+
+The Command Entries - These are the aforementioned commend entries used to formulate the
+   sql command before execution.  A history of 60 entries is maintained.
+
+The sql display pane - This is the sql output display pane.  Once a sql command is executed,
+   the results (or errors) are displayed in this window.  The display pane has a top 
+   header which will display each column name, data type (in brackets), and column width.
+   Note - if more than one result set is returned by your sql command, no header will be
+   displayed, and the multiple result sets will be displayed in the output pane.
+   
+R: label - This displays the rowcount of the executed command.
+
+C: label - This displays the column count of the executed command.
+
+Sort: menubutton - This lets the user select a column to sort by.
+
+Rev radiobutton - Sets the sort to be a reverse sort.
+
+Num radiobutton - Sets the sort to be a numeric sort.
+
+Exec button - Executes the current sql command.
+
+Snap button - Creates command "snapshots" for the current command.  Used by the snapshot
+   selection slider at the top of the window to load a saved shapshot.
+
+Clone button - Generates a second window containing the current sql output.  It allows the 
+   user to spawn a second display of the data in order to continue executing sql commands,
+   and still have the cloned data available for comparisons etc..
+
+Dtypes button - Retrieves the datatypes from the current database and displays a popup of
+   all of the returned datatype values.  The data types for each column are displayed in
+   square brackets in each column header (when the column header pane is visible).
+   
+Save button - Saves the current sql data and parameters (except for the db password) to a 
+   text file.
+
+Print button - Sends the displayed sql output to a printer.  Calls PrintDialog.pm, which
+   at this time is not on CPAN (but supposedly will be submitted soon).  I have included
+   the module in this archive to make it easier to find.
+   
+Search button - Allows the user to search (incrementally or normally) on the sql output.
+
+Exit button - Terminates the application and records the current configuration to be loaded
+   the next time dbgui is executed.
+   
+
+
+-------
+The dbgui archive contains this file, the dbgui.pl script and a PrintDialog.pm perl 
+module which is used to send the sql results to a printer.   Until this module is uploaded
+to CPAN, (hopefully soon) I will include it in this archive.
+
+
+-------
+
+Thats pretty much it...
+
+I hope you like DBgui.  I use it every day... It has made my life a lot easier..
+
+DBGUI is featured on my homepage - http://www.flash.net/~monty4  as well as other
+Perl and Perl/TK programs I have written.  I can be contacted via my webpage or
+at Monty4@flash.net.
+
+Ciao
+
+Monty
