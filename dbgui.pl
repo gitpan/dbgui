@@ -42,10 +42,13 @@
 ##
 ## Fri May 14 15:15:47 CDT 1999 Fixed problem with search dialog losing the histories
 ##
+## Tue May 18 13:55:06 CDT 1999 Fixed problem where I wasnt displaying the errors returned
+##     if an invalid command (for example) was executed on the server..  (no result sets returned)
+##
 ################################################################################
 
 #the current version
-local $VERSION="1.6.1";
+local $VERSION="1.6.2";
 
 =head1 NAME
 
@@ -2280,11 +2283,13 @@ sub error_handler {
 #the message strings returned form the DB server  "lib/linutil.pl"
 sub message_handler {
    my ($db, $message, $state, $severity, $dbtext, $server, $procedure, $line)= @_;
-   # Don't display 'informational' messages:
+   # Don't display 'informational' messages
    if ($severity > 10) {
       #wrap the error text
       $dbtext=wrap(" "," ","$dbtext");
-      push(@dbretrows,"Message:$message\nProcedure:$procedure\nLine:$line\nState:$state\nSeverity:$severity\n\n$dbtext");
+      #if there are no result rows returned, sortby wont do anything, therefore we push the
+      #error text into the display pane.
+      $queryout->insert('end',"Message:$message\nProcedure:$procedure\nLine:$line\nState:$state\nSeverity:$severity\n\n$dbtext");
       $skipsort=1;
       INT_CANCEL;
       }
