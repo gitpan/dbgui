@@ -78,7 +78,6 @@ PREREQUISITES
 
         'Tk::HistEntry'  $CPAN/authors/id/SREZIC/Tk-HistEntry-xxx.tar.gz
 
-        'Tk::PrintDialog' (not on CPAN but included with this distro)
 
     CPAN/Administrative Fun/Educational
 
@@ -137,8 +136,8 @@ Timeout slider - The timeout slider is used to set the timeout (IN SECONDS) for 
       out.  If data is being returned, then DBGUI has the opportunity to cancel the executing
       command and process the already returned result sets..
    
-CTR buttons - The "Clear Trim Restore" buttons (there is one for each command line) is used 
-   to quickly 1. clear the entire associated command entry before data is entered or pasted.  
+CTR buttons - The "Clear,Trim,Restore" buttons (there is one for each command line) is used 
+   to quickly: 1. clear the entire associated command entry before data is entered or pasted.  
    2. trim off the last element of the associated command , or 3. Restore the associated
    command from the last "CTR" operation.  These were implemented  because I am constantly 
    copying a command to the X clipboard from another window and wanting to paste the command 
@@ -149,7 +148,7 @@ CTR buttons - The "Clear Trim Restore" buttons (there is one for each command li
    the command line. Mouse button three will restore the command entry if you have accidentally 
    cleared the wrong command one.
    
-Sel buttons - The Sel buttons sets the associated command entry as 'active'.  If a command
+">" buttons - The ">" buttons sets the associated command entry as 'active'.  If a command
    entry is not active, it wont be executed, and the command entry text will be grayed out.
    If a command entry is set to active the command line will be executed when the execute 
    button is pressed or return is entered.  Note - all three command entries operate 
@@ -162,7 +161,10 @@ Sel buttons - The Sel buttons sets the associated command entry as 'active'.  If
 The Command Entries - These are the aforementioned commend entries used to formulate the
    sql command before execution.  A history of 60 entries is maintained.
 
-The sql display pane - This is the sql output display pane.  Once a sql command is executed,
+The SQL Edit buttons - These allow the user to edit the associated SQL command in a larger
+   window.   This makes it much easier when the SQL commands are really huge..
+
+The SQL display pane - This is the sql output display pane.  Once a sql command is executed,
    the results (or errors) are displayed in this window.  The display pane has a top 
    header which will display each column name, data type (in brackets), and column width.
    Note - if more than one result set is returned by your sql command, no header will be
@@ -173,15 +175,14 @@ Rows: label - This displays the rowcount of the executed command.
 
 Cols: label - This displays the column count of the executed command.
 
-Sum button - Attempts to sum up all of the values in the sorted column and display the results.
+Sum button - Attempts to sum up all of the values in the selected column and display the results.
    If non-numeric data is encountered "N/A" is displayed for the total.
 
 Sort button - This executes the sort function on the selected column.  A "hidden" feature of 
-   the sort label is if mouse button three is clicked, sorting will be disabled for the next 
-   command executed. Once a second command executed, the sort status is restored to normal. 
-   Mouse button one restores the default sort status.
+   the sort label is if mousebutton three is clicked, sorting will be disabled until mousebutton
+   one is clicked to reinstate it.
 
-Sortby Menubutton - This selects the column to use for the sort function.
+Column Selection Menubutton - This selects the column to use for the sort and sum functions 
 
 Rev radiobutton - Sets the sort to be a reverse sort.
 
@@ -200,28 +201,14 @@ Clone button - Generates a second window containing the current sql output.  It 
 Save button - Saves the current sql data and parameters (except for the db password) to a 
    text file.
 
-Print button - Sends the displayed sql output to a printer.  Calls PrintDialog.pm, which
-   at this time is not on CPAN (but supposedly will be submitted soon).  I have included
-   the module in this archive to make it easier to find.
+Print button - Sends the displayed sql output to a printer.  Generates a print dialog to 
+   allow the user to specify print options.
    
 Search button - Allows the user to search (incrementally or normally) on the sql output.
 
 Exit button - Terminates the application and records the current configuration to be loaded
    the next time dbgui is executed.
    
-
-
--------
-
-The DBGUI archive contains this file, the dbgui.pl script and a PrintDialog.pm perl 
-module which is used to send the sql results to a printer.   Until this module is uploaded
-to CPAN, (hopefully soon) I will include it in this archive.
-
-Note - the PrintDialog.pm file has been renamed in this archive to PrintDialog.module
-to prevent PAUSE automatic processing from posting PrintDialog as one of my own modules.
-This file merely needs to be renamed to PrintDialog.pm and installed on your system.
-
-
 -------
 
 Thats pretty much it...

@@ -55,7 +55,7 @@
 ## Wed Jun 16 17:54:50 CDT 1999  Made some minor - mostly cosmetic changes.  Fixed a bug where
 ##     the sql command was being printed twice in a save file.
 ##
-## Tue Jun 22 17:14:03 CDT 1999  Added the checkpoint file as an argument to allow pre-defined
+## Tue Jun 22 17:14:03 CDT 1999  Added the file as an argument to allow pre-defined
 ##     menu histories to be defined and kept in separate database files.
 ##
 ## Fri Jul 9 14:05:10 CDT 1999 Version 2.0.  Ported to DBI/DBD!. Fixed a bug in the handling of
@@ -67,10 +67,25 @@
 ##
 ## Tue Oct 19 18:56:25 CDT 1999  Added the capability to sum up the sorted column
 ##
+## Tue Oct 26 11:37:46 CDT 1999 Fixed a bug where the tmp file wasnt being specified for printing
+##     the sql results!!.  How did I miss that one!
+##
+## Tue Jan 11 18:53:21 CST 2000  Added code to generate the print dialog instead of relying on
+##     the printdialog module.   
+##
+## Wed Jan 19 17:37:33 CST 2000  Fixed a bug where the sort function was causing the column
+##     count to be incremented by the original column count instead of counting from zero!?
+##
+## Tue Mar 21 11:02:29 CST 2000  Minor tweak to keep the sort option in a specific state until
+##     the user changes it
+##
+## Thu Mar 30 12:06:48 CST 2000  Added the SQL edit feature to make it easier to change
+##     really long SQL commands .
+##
 ################################################################################
 
 #the current version
-my $VERSION="2.1.7";
+my $VERSION="2.1.8";
 
 =head1 NAME
 
@@ -120,7 +135,7 @@ The date/time of command execution is captured in the title bar.
 
 The checkpoint file can be specified as an argument. Allowing pre-defined menu histories to be defined
 
-More probably....  :-)
+More probably....  :^)
 
 =back
 
@@ -163,7 +178,7 @@ use Sys::Hostname;
 
 #sort library
 use Sort::Fields;
-use Tk::PrintDialog;
+#wrap used in reporting DB error text 
 use Text::Wrap;
 
 #perl variables
@@ -171,7 +186,7 @@ $|=1;      # set output buffering to off
 $[ = 0;    # set array base to 0
 $, = ' ';  # set output field separator
 $\ = "\n"; # set output record separator
-$" = "\n"; #set the list element separator
+$" = "\n"; # set the list element separator
 
 #The colors and such
 my $txtbackground="snow2";
@@ -180,8 +195,8 @@ my $background="bisque3";
 my $troughbackground="bisque4";
 my $buttonbackground="tan";
 my $headerbackground='#f0f0c7';
-my $headerforeground='#900000';
-my $datatypeforeground='#704030';
+my $headerforeground='#800000';
+my $datatypeforeground='#604030';
 my $winfont="8x13bold";
 my $trbgd="bisque4";
 my $labelbackground='bisque2';
@@ -194,10 +209,8 @@ my $ypad=4;
 my $busy="Ready";
 my $busycolor="red2",
 my $unbusycolor='#009f00',
-my $savedialogcolor="#caC2BBBBA7A7";
 my $histlimit=100;
-my $delim='!#!#!';
-
+my $delim='#@';
 #get the hostname used for the connection info in the server
 my $localhostname=hostname;
 #######################################################################
@@ -266,13 +279,25 @@ my $sqshbinary="/net/pvcsserv01/sft/tools/sqsh";
 my $dbtypescmd="select type,length,name from systypes";
 
 #available printers
-my @printers=("hp4si-678-1158","Print-to-File");
+my @printers=("hp4si-678-1158","Print to File");
 
 #set to the postscript printing program.  We use a2ps
 my $psprint="/net/pvcsserv01/sft/gnu/opt/a2ps/bin/a2ps";
 
+#the tempfile used for printing
+my $printfile="/tmp/dbgui.ps";
+
+#the default print font size
+my $size_set=10;
+
+#the default number of copies to print
+my $copies=1;
+
 #a list of variables that are saved in the checkpoint file
 my @variablelist=qw(
+srchstring
+method
+timeout
 dbserver
 dbuser
 dbpass
@@ -289,9 +314,6 @@ snapshot1
 snapshot2
 snapshot3
 snapshot4
-srchstring
-method
-timeout
 );
 
 #a list of arrays that are saved in the checkpoint file
@@ -338,9 +360,16 @@ if (!-f $checkpointfile) {
       -title=>"Prompt",
       -text=>"The Checkpoint file \"$checkpointfile\" does not exist...\nCreate it??",
       );
-   if ($confirmbox ne "Ok") {
-       exit;
-      }#
+   if ($confirmbox eq "Ok") {
+      #set the defaults for the sliders etc.. mostly so the scale widgets will startup properly
+      $snapshot=0;
+      $timeout=30;
+      $method="DBI/DBD";
+      $maxrowcount=1000;
+      &checkpoint;
+      }else{
+         exit;
+         }
    }#if ! -f checkf
 
 #if the checkpoint file exists, execute it to startup in the same state as when it was shutdown
@@ -354,7 +383,7 @@ $snapshot=0;
 #make sure the alarmstring is empty
 $alarmstring="";
 
-#make sure the initial setting for the app is to perform sorts
+#the initial setting for the app is to perform sorts
 $sortoverride=0;
 
 #a list of potentially dangerous commands that should be operator confirmed before being executed
@@ -397,7 +426,7 @@ my $LW = new  MainWindow (-title=>"DBGUI $VERSION  [$checkpointfile]");
 #set some inherited default colors
 $LW->optionAdd("*background","$background");
 $LW->optionAdd("*foreground","$txtforeground");
-$LW->optionAdd("*highlightBackground", "$savedialogcolor");
+$LW->optionAdd("*highlightBackground", "$background");
 $LW->optionAdd("*Button.Background", "$buttonbackground");
 $LW->optionAdd("*activeForeground", "$txtforeground");
 $LW->optionAdd("*Menubutton*Background", "$buttonbackground");
@@ -590,7 +619,6 @@ my $servhistframe=$labelent1->Frame(
       -pady=>0,
       -padx=>1,
       );
-
 
 $dbserventry=$servhistframe->HistEntry(
    -relief=>'flat',
@@ -826,7 +854,7 @@ my $snapscale=$labelent6->Scale(
    -to=>4,
    -length=>86,
    -troughcolor=>$txtbackground,
-   -sliderlength=>12,
+   -sliderlength=>14,
    -width=>19,
    -showvalue=>0,
    -command=>sub{&run_snapshot("$snapshot");},
@@ -923,7 +951,7 @@ my $timescale=$labelent8->Scale(
    -to=>600,
    -length=>70,
    -troughcolor=>$txtbackground,
-   -sliderlength=>12,
+   -sliderlength=>14,
    -width=>19,
    -showvalue=>0,
    -resolution=>30,
@@ -964,7 +992,7 @@ my $clr1=$qs1frame->Button(
       -fill=>'y',
       );
 
-#use button two to chop off the last word
+#use button two to chop off the last word of the query string
 $clr1->bind('<Button-2>'=>sub{
    $qs1sav=$querystring1;
    $querystring1=~s/\ *$//;
@@ -983,8 +1011,8 @@ $clr1->bind('<Button-3>'=>sub{
 
 $qscheck1=$qs1frame->Checkbutton(
    -variable=>\$qsactive1,
-   -text=>"S",
    -background=>$buttonbackground,
+   -text=>">",
    -borderwidth=>1,
    -selectcolor=>'red4',
    -width=>2,
@@ -996,6 +1024,17 @@ $qscheck1=$qs1frame->Checkbutton(
       -expand=>0,
       -padx=>0,
       -fill=>'y',
+      );
+
+$qsedit1=$qs1frame->Button(
+   -relief=>'raised',
+   -text=>"Edit",
+   -width=>2,
+   -command=>sub{&cmdedit('1')},
+   )->pack(
+      -side=>'right',
+      -expand=>0,
+      -padx=>0,
       );
 
 $qsentry1=$qs1frame->HistEntry(
@@ -1063,7 +1102,7 @@ $clr2->bind('<Button-3>'=>sub{
 $qscheck2=$qs2frame->Checkbutton(
    -variable=>\$qsactive2,
    -relief=>'raised',
-   -text=>"S",
+   -text=>">",
    -background=>$buttonbackground,
    -selectcolor=>'red4',
    -width=>2,
@@ -1072,6 +1111,18 @@ $qscheck2=$qs2frame->Checkbutton(
    -command=>sub{&act_deactivate("qsentry2","qsactive2")},
    )->pack(
       -side=>'left',
+      -expand=>0,
+      -padx=>0,
+      -fill=>'y',
+      );
+
+$qsedit2=$qs2frame->Button(
+   -relief=>'raised',
+   -text=>"Edit",
+   -width=>2,
+   -command=>sub{&cmdedit('2')},
+   )->pack(
+      -side=>'right',
       -expand=>0,
       -padx=>0,
       -fill=>'y',
@@ -1142,7 +1193,7 @@ $clr3->bind('<Button-3>'=>sub{
 $qscheck3=$qs3frame->Checkbutton(
    -variable=>\$qsactive3,
    -relief=>'raised',
-   -text=>"S",
+   -text=>">",
    -background=>$buttonbackground,
    -selectcolor=>'red4',
    -width=>2,
@@ -1151,6 +1202,18 @@ $qscheck3=$qs3frame->Checkbutton(
    -command=>sub{&act_deactivate("qsentry3","qsactive3")},
    )->pack(
       -side=>'left',
+      -expand=>0,
+      -padx=>0,
+      -fill=>'y',
+      );
+      
+$qsedit3=$qs3frame->Button(
+   -relief=>'raised',
+   -text=>"Edit",
+   -width=>2,
+   -command=>sub{&cmdedit('3')},
+   )->pack(
+      -side=>'right',
       -expand=>0,
       -padx=>0,
       -fill=>'y',
@@ -1195,6 +1258,7 @@ $qsentry3->history([@queryhist3]);
 $scrolly=$listframe1->Scrollbar(
    -orient=>'vert',
    -elementborderwidth=>1,
+   -width=>12,
    )->pack(
       -side=>'right',
       -fill=>'y',
@@ -1203,6 +1267,7 @@ $scrolly=$listframe1->Scrollbar(
 $scrollx=$listframe1->Scrollbar(
    -orient=>'horiz',
    -elementborderwidth=>1,
+   -width=>14,
    )->pack(
       -side=>'bottom',
       -fill=>'x',
@@ -1246,8 +1311,8 @@ $queryout=$listframe1->Text(
 $scrolly->configure(-command=>['yview', $queryout]);
 $scrollx->configure(-command=>\&my_xscroll);
 
-my $menu = $queryout->Menu( -menuitems => $menuitems );
-my $textmenu = $queryout->GetMenu;
+my $menu=$queryout->Menu( -menuitems => $menuitems );
+my $textmenu=$queryout->GetMenu;
 
 #------------------------------------------------------------------------------------------
 #                              bottom row of buttons and labels
@@ -1371,7 +1436,7 @@ my $sortbyentry=$sortframe->Optionmenu(
 $sortbutton->bind('<Button-1>'=>sub{
    $sortoverride=0;
    $sortbutton->configure(-foreground=>$txtforeground);
-   $sortbyentry->configure(-state=>'normal');
+#   $sortbyentry->configure(-state=>'normal');
    });
 $sortbutton->bind('<Button-3>'=>sub{
    $sortoverride=1;
@@ -1387,7 +1452,6 @@ my $revsortbutton=$sortframe->Checkbutton(
    -width=>4,
    -offvalue=>0,
    -onvalue=>1,
-   -command=>sub {&sortby($tscrollx,$tscrolly)},
    )->pack(
       -side=>'left',
       -expand=>0,
@@ -1405,7 +1469,6 @@ my $numsortbutton=$sortframe->Checkbutton(
    -width=>4,
    -offvalue=>0,
    -onvalue=>1,
-   -command=>sub {&sortby($tscrollx,$tscrolly)},
    )->pack(
       -side=>'left',
       -expand=>0,
@@ -1459,7 +1522,7 @@ $buttonframe->Button(
 my $printbutton=$buttonframe->Button(
    -text=>'Print',
    -width=>$buttonwidth,
-   -command=>\&printit,
+   -command=>\&printdialog,
    )->pack(
       -side=>'right',
       -padx=>0,
@@ -1577,7 +1640,90 @@ $sortbyentry->configure(-textvariable=>\$sortby);
 MainLoop();
 
 #                                         subroutines
+#
 #------------------------------------------------------------------------------------------
+
+sub cmdedit {
+   ($item)=@_;
+   return if ($item eq "");
+   #The main qsedit window
+   $EW->destroy if Exists($EW);
+   $EW=new MainWindow(-title=>"SQL Edit");
+   $EW->optionAdd("*borderWidth", "1");
+   $EW->optionAdd("*highlightThickness", "0");
+   $EW->optionAdd("*troughColor", "$troughbackground");
+   $EW->optionAdd("*background","$background");
+   #set a minimum size so the window cant be resized down to mess up the buttons
+   $EW->minsize(484,144);
+   #The top frame for the text
+   my $qseditframe1=$EW->Frame(
+      -borderwidth=>'0',
+      -relief=>'flat',
+      )->pack(
+         -expand=>1,
+         -fill=>'both',
+         );
+
+   #frame for the buttons
+   my $qseditframe2=$EW->Frame(
+      -borderwidth=>'0',
+      -relief=>'flat',
+      )->pack(
+         -fill=>'x',
+         -expand=>0,
+         );
+         
+   $qseditwin=$qseditframe1->Scrolled('Text',
+      -font=>$winfont,
+      -scrollbars=>'e',
+      -wrap=>'word',
+      -width=>92,
+      -height=>7,
+      -relief=>'sunken',
+      -background=>$txtbackground,
+      -foreground=>$txtforeground,
+      )->pack(
+          -expand=>1,
+          -fill=>'both',
+          );
+          
+   $qseditframe2->Button(
+      -text=>'Cancel',
+      -width=>5,
+      -background=>$buttonbackground,
+      -foreground=>$txtforeground,
+      -font=>$winfont,
+      -command=>sub{$EW->destroy;}
+      )->pack(
+         -expand=>0,
+         -side=>'right',
+         -padx=>0,
+         -pady=>2,
+         );
+
+   $qseditframe2->Button(
+      -text=>'Accept',
+      -width=>5,
+      -background=>$buttonbackground,
+      -foreground=>$txtforeground,
+      -font=>$winfont,
+      -command=>sub{&apply_edit;},
+      )->pack(
+         -expand=>0,
+         -side=>'right',
+         -padx=>1,
+         -pady=>2,
+         );
+      $itemstring="querystring$item";
+      $qseditwin->insert('end',"$$itemstring");
+}#sub cmdedit
+
+sub apply_edit {
+   my $editstring=$qseditwin->get('0.0','end');
+   $editstring=~s/\n//g;
+   $$itemstring=$editstring;
+   $EW->destroy if Exists($EW);
+}#sub apply edit
 
 sub clone_data {
    my $clonedate=$LW->cget(-title);
@@ -1851,7 +1997,7 @@ sub check_cmd {
    &setbusy;
    $confirm=&operconfirm;
    if ($confirm eq "Ok") {
-      $date=`date`;
+      $date=localtime(time());
       $LW->configure(-title=>"DBGUI $VERSION  [$checkpointfile]  $date");
       #save off a wrapped version of the sqlstring for the ascii save files
       $savsqlstring=wrap("    ","    ","$sqlstring");
@@ -2119,16 +2265,9 @@ sub set_query_state {
    my @empty="";
    #sometimes the menu would be doubled up - caused by invoking the menubutton when it is configured.
    #clearing them menu and then reconfiguring it works around this behavior.  ugh..
-   $sortbyentry->configure(-options=>\@empty);
-   $sortbyentry->configure(-options=>\@sortbyhist,-width=>24,-justify=>'left');
-   if ($sortoverride==0) {
-      $sortbutton->configure(-foreground=>$txtforeground);
-      $sortbyentry->configure(-state=>'normal');
-      }else{
-         $sortbutton->configure(-foreground=>'grey65');
-         }
-   #set the sort override off, the override is only good for one command execution
-   $sortoverride=0;
+   $sortbyentry->configure(-options=>\@empty,-width=>24,-justify=>'left');
+   $sortbyentry->configure(-state=>'normal',-options=>\@sortbyhist);
+   $sortbutton->configure(-state=>'normal');
    }#sub
 
 #configure colors to make these labels and the sort checkboxes unavailable
@@ -2136,7 +2275,7 @@ sub set_command_state {
    $queryheader->packForget;
    $queryout->pack(@datainfo);
    $sortby=" ";
-   $sortbutton->configure(-foreground=>'grey65');
+   $sortbutton->configure(-state=>'disabled');
    $revsortbutton->configure(-state=>'disabled',-selectcolor=>$buttonbackground);
    $numsortbutton->configure(-state=>'disabled',-selectcolor=>$buttonbackground);
    $sumbutton->configure(-state=>'disabled');
@@ -2144,7 +2283,7 @@ sub set_command_state {
    $rownumlabel->configure(-foreground=>'grey65');
    $dbrowcount="";
    $dbcolcount="";
-   $sortbyentry->configure(-width=>24,-justify=>'left',-state=>'disabled');
+   $sortbyentry->configure(-width=>24,-justify=>'left',-state=>'disabled',-activebackground=>$buttonbackground,-options=>\@empty);
    #set the skipsort flag to 0 for the next time that a db command is executed.
    #the manual override for sorting only lasts for one command execution
    $skipsort=0;
@@ -2187,9 +2326,6 @@ sub sortby {
          #Actually execute the sort
          @dbretrows=fieldsort '\|',[$sortindex],@dbretrows;
          }#if sortby
-      #populate the header just before the data fields
-      $queryheader->delete('0.0','end');
-      $queryheader->insert('end',"$qhstring1\n$qhstring2");
       #since we can now override the sort, scan the entire results for a null line or a
       #line of spaces and remove them from the data.  When the sort was always forced,
       #these rows were always at the start of the data, now they are not
@@ -2199,6 +2335,9 @@ sub sortby {
             $x--;
             }#if
          }#for
+      #populate the header just before the data fields
+      $queryheader->delete('0.0','end');
+      $queryheader->insert('end',"$qhstring1\n$qhstring2");
       }else {
          #take off the first row if null and resultcount is >1
          if ($dbretrows[0]=~/^ *$/) {
@@ -2212,18 +2351,26 @@ sub sortby {
    #check the header to see if it contains any real data.  This is for those sp_commands that only
    #return one resultset, but dont have a  structured table style output, therefore we need to treat
    #the data like a command not a table.   ex - sp_lock
-   my $testhdata=$queryheader->get('0.0','end');
+   $_=$queryheader->get('2.0','end');
    #if only one result was returned set the query state, otherwise set the command state
-   if ($resultcount==1&&$testhdata=~/\w/) {
+   if ($resultcount==1&&$_=~/\w/) {
       &set_query_state;
-         $dbrowcount=($#dbretrows+1);
-         $dbcolcount=(split(/\|/,"$dbretrows[0]")-1);
-         if ($dbcolcount <0) {
-            $dbcolcount=0;
-            }
-      }else{
-         &set_command_state
+      #set the rowcount variable... If the first row of data is null, leave rowxount at 0
+      $dbrowcount=($#dbretrows);
+      if ($dbretrows[0] ne "") {
+         $dbrowcount++;
          }
+      #count the columns by counting the column seperator in the first row of data in the header
+      #$dbcolcount=(split(/\|/,"$testhdata")-1);
+      $dbcolcount=0;
+      $dbcolcount += tr/|/|/;
+      if ($dbcolcount <0) {
+         $dbcolcount=0;
+         }
+      }else{
+         &set_command_state;
+         }
+   #if the scrollbars have been moved, set the display back where it was
    if ($tscrollx>-1 && $tscrolly>-1) {
       $queryheader->xview(moveto=>$tscrollx);
       $queryout->xview(moveto=>$tscrollx);
@@ -2244,7 +2391,7 @@ sub sortby {
             );
          $current=$queryout->index("$current + 1 line");
          }#while true
-      }
+      }#if resultcount>1 &&...
    &setunbusy;
    }#sub sortby
 
@@ -2264,16 +2411,18 @@ sub total_col {
    $sum=0;
    foreach (@dbretrows) {
       my $t=(split("\\| +","$_"))[$sumindex-1];
+      #skip the itme if it is blank
       next if ($t=~/^ *$/);
-      #$t=~s/ //g;
-      if ($t!~/^ *\d+ *$|^ *\d+\.[\d+] *$/) {
-         $sum="N\\A";
-         $t=0;
-         last;
-         }
+      #if the column contains any data that is not an integer or a float, skip it
+      next if ($t!~/^\d+ *$|^\d+\.\d+ *$/);
+#       {
+#         $sum="N\\A";
+#          next;
+#         last;
+#         }
       $sum+=$t;
       }
-   $alarmstring="    $sortby Total: $sum";
+   $alarmstring="    \'$sortby\' Total: $sum";
    }
    
 #write out the returned query information to an ascii file
@@ -2286,19 +2435,18 @@ sub savit {
        ["Text files",          ['.txt']],
        ["All files ",          ['*']],
       );
-   $LW->optionAdd("*background","$savedialogcolor");
-   $LW->optionAdd("*highlightBackground", "$savedialogcolor");
+   #cant get the filedialog colors to look right..   setting the label option helps
+   $LW->optionAdd("*Label*Background", "$background");
    $outfile=$LW->getSaveFile(
       -filetypes        => \@types,
       -initialfile      => 'dbgui.out',
       -defaultextension => '.out',
       );
-   $LW->optionAdd("*background","$background");
-   $LW->optionAdd("*highlightBackground", "$savedialogcolor");
+   $LW->optionAdd("*Label*Background", "$labelbackground");
    #if the save dialog was canceled off, dont continue
    return if ($outfile eq "");
    }
-   my $date=`date`;
+   my $date=localtime(time());
    open(outfile, ">$outfile") || die "Can't open save file :$outfile";
    print outfile "\nReport created $date";
    print outfile "Query Data:";
@@ -2346,19 +2494,17 @@ sub clone_savit {
        ["Text files",          ['.txt']],
        ["All files ",          ['*']],
       );
-   $LW->optionAdd("*background","$savedialogcolor");
-   $LW->optionAdd("*highlightBackground", "$savedialogcolor");
+   $LW->optionAdd("*Label*Background", "$background");
    $cloneoutfile=$LW->getSaveFile(
       -filetypes        => \@types,
       -initialfile      => 'clone_dbgui.out',
       -defaultextension => '.out',
       );
-   $LW->optionAdd("*background","$background");
-   $LW->optionAdd("*highlightBackground", "$savedialogcolor");
+   $LW->optionAdd("*Label*Background", "$labelbackground");
    #if the save dialog was canceled off, dont continue
    return if ($cloneoutfile eq "");
    }
-   my $date=`date`;
+   my $date=localtime(time());
    open(outfile, ">$cloneoutfile") || die "Can't open save file :$cloneoutfile";
    print  outfile "\nCloned Data Report created $date\n\nQuery Data:";
    print outfile "$clonestat\n";
@@ -2381,17 +2527,6 @@ sub clone_savit {
    close outfile;
    }#sub clone_savit
 
-sub printit {
-   &savit("/tmp/dbgui.prt");
-   my $p=$LW->PrintDialog(
-      -Printers=>\@printers,
-      -InFile=>$outfile,
-      -Program=>$psprint,
-      );
-   $p->Show;
-   $outfile="";
-   }#sub printit
-
 #eval the snapshot string for the current snapshot variable value
 sub run_snapshot {
    ($snapnum)=@_;
@@ -2401,7 +2536,6 @@ sub run_snapshot {
    #otherwise, everytime a snapshot is executed, the slashes start stacking up, we dont want
    #the slashes displayed in the GUI, only in the checkpoint file
    foreach ($querystring1,$querystring2,$querystring3) {
-      #replace any single quote strings with an escaped quote
       $_ =~ s/\\'/\'/g;
       $_ =~ s/\\"/\"/g;
       $_ =~ s/\\@/\@/g;
@@ -2448,12 +2582,14 @@ sub checkpoint {
    #the history arrays will get lost the next time the utility is started, so I write all
    #variables to the checkpoint file as empty even though they are redefined with snapshot0
    &take_snapshot("0");
-
    #since the variables can contain dollar signs (like in sp_helptext commands)
    #etc... escape the special characters
    foreach (@variablelist) {
       if (!/^snapshot/) {
-         print ckptfile "\$$_=\"\"\;";
+         $snapvar=${$_};
+         #substitute @ signs for excaped ones
+         $snapvar=~s/@/\\@/g;
+         print ckptfile "\$$_=\"${$snapvar}\"\;";
          }else{
             if ("${$_}" ne "") {
                print ckptfile "\$$_=q\($$_\)\;";
@@ -2463,7 +2599,7 @@ sub checkpoint {
                    foreach (@variablelist) {
                       next if (/^snapshot/);
                       $snapshotstring.="\$$_=\'\'\;"
-                      }
+                      }#foreach
                     ${$_}=$snapshotstring;
                     print ckptfile "\$${$_}\)\;";
                    }#else
@@ -2475,7 +2611,9 @@ sub checkpoint {
          #substitute double quotes for escaped ones
          $_=~s/\\*\"/\\\"/g;
          #substitute @ symbols for escaped ones
-         $_=~s/\@/\\\@/g;
+         $_=~s/\\*\$/\\\$/g;
+         #substitute @ symbols for escaped ones
+         $_=~s/\\*\@/\\\@/g;
          $arraystring.="\"$_\",\n";
          }
       $arraystring.="\);";
@@ -2489,13 +2627,18 @@ sub checkpoint {
 #by the checkbuttons
 sub act_deactivate {
    my ($querywid,$queryline)=@_;
-   if (${$queryline} eq "1") {
-      ${$querywid}->configure(-fg=>$txtforeground);
-      ${$querywid}->focus;
-      }else{
-         ${$querywid}->configure(-fg=>'grey65');
-         }
-    ${$querywid}->update;
+   #I have to check to see if the widgets actually exist before configuring them,
+   #this is to handle problems running snapshow when a clean .dbgui file is being
+   #created on startup.
+   if (${$querywid}) {
+      if (${$queryline} eq "1") {
+         ${$querywid}->configure(-fg=>$txtforeground);
+         ${$querywid}->focus;
+         }else{
+            ${$querywid}->configure(-fg=>'grey65');
+            }#else
+      ${$querywid}->update;
+      }
    }#sub
 
 #query results search dialog
@@ -2742,7 +2885,7 @@ sub alarm_handler {
 }#sub
 
 #error handler taken from subutil.pl in the sybperl distribution.  Needed to trap
-#the error strings returned for non DB type
+#the error strings returned for non DB type errors
 sub err_handler {
    my ($err, $severity, $state, $line, $server, $proc, $msg)= @_;
    #print "ERROR Handler ($err, $severity, $state, $line, $server, $proc, $msg)";
@@ -2750,7 +2893,6 @@ sub err_handler {
    if ($severity >=10 && $err>0) {
       $msg=wrap(" "," ","$msg");
       $skipsort=1;
-      $sortoverride=1;
       $queryout->insert('end',"Error:$err\nProcedure:$proc\nLine:$line\nState:$state\nSeverity:$severity\n\n$msg\n");
       #I have to push the error text onto the retrows array for errors
       push(@dbretrows,"Error:$err\nProcedure:$proc\nLine:$line\nState:$state\nSeverity:$severity\n\n$msg\n");
@@ -2768,5 +2910,402 @@ sub err_handler {
       }
 }#sub error_handler
 
-#return a positive status
-1;
+#create a printdialog to collect options before sending to a printer
+sub printdialog {
+   #save the data to a tempfile for printing
+   &savit("/tmp/dbgui.prt");
+   ## Create the toplevel window
+   $printwin->destroy if Exists($printwin);
+   $printwin = Tk::MainWindow->new;
+   $printwin->minsize(375, 243);
+   $printwin->maxsize(375, 243);
+   $printwin->optionAdd("*font", "$winfont");
+   $printwin->optionAdd("*background","$background");
+   $prt_opt_f=$printwin->Frame( 
+      -relief=>'raised', 
+      -borderwidth=>'1',
+      -background=>$background,  
+      )->pack( 
+         -side=>'top', 
+         -anchor=>'w', 
+         -fill=>'both', 
+         -expand=>'yes',
+         );
+
+   $prt_opt_f->Frame( 
+      -relief=>'flat', 
+      -borderwidth=>'0',
+      -background=>$background,
+      -height=>5,  
+      )->pack( 
+         -side=>'top', 
+         -fill=>'x', 
+         -expand=>'no',
+         );
+
+   $printer_f=$prt_opt_f->Frame(
+      -relief=>'flat', 
+      -borderwidth=>'1',
+      -background=>$background,  
+      )->pack( 
+         -side=>'left', 
+         -anchor=>'w', 
+         -fill=>'both', 
+         -expand=>'yes',
+         );
+
+   $options_f=$prt_opt_f->Frame(
+      -relief=>'flat', 
+      -borderwidth=>'1',
+      -background=>$background,  
+      )->pack( 
+         -side=>'left', 
+         -anchor=>'w', 
+         -fill=>'both',
+         );
+
+   $buttons_f=$printwin->Frame(
+      -relief=>'raised', 
+      -borderwidth=>'1',
+      -background=>$background,  
+         )->pack( 
+         -side=>'top', 
+         -anchor=>'e', 
+         -fill=>'both', 
+         -expand=>'yes',
+         );
+
+   $status_f=$printwin->Frame(
+      -relief=>'flat', 
+      -borderwidth=>'1',
+      -background=>$background,  
+         )->pack( 
+         -side=>'top', 
+         -anchor=>'e', 
+         -fill=>'both', 
+         -expand=>'yes',
+         );
+
+#############################################################################
+  # Create Printer, Font and Size Selection Frame Contents
+
+   $prt_f=$printer_f->Frame(
+      -background=>$background,
+      )->pack( 
+         -side=>'top',
+         );
+
+  $prt_f->Label(
+      -text=>"  Printer:",
+      -background=>$background,
+      -justify=>'right',
+      )->pack( 
+         -side=>'left',
+         -pady=>2,
+         );
+
+   $prt_f->Optionmenu(
+      -underline=>0,
+      -relief=>'raised',
+      -textvariable=>\$printer_set,
+      -highlightthickness=>0,
+      -borderwidth=>1,
+      -background=>$buttonbackground,
+      -width=>14,
+      -options=>\@printers,
+      -command=>\&check_printer,
+         )->pack(-side=>'left',
+         -padx=>'5',
+         -pady=>2,
+         );
+
+   $size_f=$printer_f->Frame(
+      -background=>$background,
+      )->pack( 
+         -side=>'top',
+         );
+
+   $size_f->Label(
+      -text=>"Font Size:",
+      -background=>$background,  
+      -justify=>'right',
+      )->pack( 
+         -side=>'left',
+         -pady=>2,
+         );
+
+  $size_f->Optionmenu(
+      -underline=>0,
+      -relief=>'raised',
+      -textvariable=>\$size_set,
+      -highlightthickness=>0,
+      -borderwidth=>1,
+      -background=>$buttonbackground,
+      -width=>14,
+      -options=>[qw(5 6 7 8 9 10 11 14 17 20 24)],
+      )->pack(
+         -side=>'left',
+         -padx=>'5' ,
+         -pady=>2,
+         );
+
+   # Create Filename Entry Frame Contents
+   $psfile_f=$printer_f->Frame(
+      -background=>$background,
+      -borderwidth=>0,
+      -relief=>'flat',
+      )->pack( 
+         -side=>'top',
+         -pady=>2,
+         );
+
+   $psfile_f->Label( 
+      -text=>"  Outfile:",
+      -highlightthickness=>0,
+      -borderwidth=>1,
+      -background=>$background,
+      )->pack( 
+         -side=>'left',
+         -pady=>2,
+         );
+
+   $file_e=$psfile_f->Entry(
+      -textvariable=>\$printfile,
+      -highlightthickness=>0,
+      -borderwidth=>2,
+      -background=>'white', 
+      -width=>18,  
+      -relief=>'sunken',
+      )->pack(
+         -side=>'left',
+         -padx=>'5',
+         );
+
+
+   #############################################################################
+   # Create Copies and Options Selection Frame Contents
+
+   $options_f1=$options_f->Frame(  
+      -background=>$background,
+      )->pack( 
+         -side=>'top', 
+         -anchor=>'w', 
+         -fill=>'both',
+         );
+
+   $options_f2=$options_f->Frame(  
+      -background=>$background,
+      )->pack( 
+      -side=>'top', 
+      -anchor=>'w', 
+      -fill=>'both',
+      );
+
+   # Start the contruction
+   $options_f1->Label(
+      -text=>"Copies:",
+      -highlightthickness=>0,
+      -borderwidth=>1,
+      -background=>$background,
+      )->pack(
+         -side=>'left',
+         ); 
+
+   $options_f1->Entry(
+      -textvariable=>\$copies,
+      -highlightthickness=>0,
+      -borderwidth=>1,
+      -background=>'white',
+      -width=>3,
+      )->pack(
+         -side=>'left',
+         );
+
+   $options_f2->Frame(
+      -background=>$background,
+      -height=>3,
+      )->pack(
+         -side=>'top', 
+         -anchor=>'w',
+         );
+
+   $options_f2->Checkbutton(
+      -text=>"Landscape   ",
+      -background=>$background,
+      -relief=>'flat',
+      -highlightthickness=>0,
+      -borderwidth=>1,
+      -variable=>\$CkBtn1_set,
+      -justify=>'left',
+      )->pack(
+         -side=>'top', 
+         -fill=>'x', 
+         -expand=>'no',
+         );
+
+   $options_f2->Checkbutton(
+      -text=>"2-Columns   ",
+      -background=>$background,
+      -relief=>'flat',
+      -highlightthickness=>0,
+      -borderwidth=>1,
+      -variable=>\$CkBtn2_set,
+      )->pack(
+         -side=>'top', 
+         -fill=>'x', 
+         -expand=>'no',
+         );
+
+   $options_f2->Checkbutton(
+      -text=>"Line Numbers",
+      -background=>$background,
+      -relief=>'flat',
+      -highlightthickness=>0,
+      -borderwidth=>1,
+      -variable=>\$CkBtn3_set,
+      )->pack(
+         -side=>'top', 
+         -fill=>'x', 
+         -expand=>'no',
+         );
+
+   $options_f2->Checkbutton(
+      -text=>"No Title    ",
+      -relief=>'flat',
+      -background=>$background,
+      -relief=>'flat',
+      -highlightthickness=>0,
+      -borderwidth=>1,
+      -variable=>\$CkBtn4_set,
+      )->pack(
+         -side=>'top', 
+         -fill=>'x', 
+         -expand=>'no',
+         );
+
+   $options_f2->Checkbutton(
+      -text=>"Truncate    ",
+      -background=>$background,
+      -relief=>'flat',
+      -highlightthickness=>0,
+      -borderwidth=>1,
+      -variable=>\$CkBtn5_set,
+      )->pack(
+         -side=>'top', 
+         -fill=>'x', 
+         -expand=>'no',
+         );
+
+   #############################################################################
+   # Create Button Frame Contents
+
+   $buttons_f->Button(
+      -background=>$buttonbackground,
+      -text=>'Cancel',
+      -borderwidth=>1,   
+      -highlightthickness=>0,
+      -command=>sub{$printwin->destroy;unlink("/tmp/dbgui.prt")},
+      )->pack(
+         -side=>'left', 
+         -expand=>'yes', 
+         -pady =>'10',
+         );
+
+   my $def_btn=$buttons_f->Frame(
+      -relief=>'sunken',
+      -borderwidth=>1,
+      -background=>$background,
+      )->pack(
+         -side=>'left', 
+         -expand=>1,
+         );
+
+   $def_btn->Button(
+      -background=>$buttonbackground,
+      -text=>'Print',
+      -borderwidth=>1,
+      -highlightthickness=>0,  
+      -command=>\&Do_Print,
+      )->pack(
+         -padx=>'1m', 
+         -pady=>'1m',
+         );
+
+   #############################################################################
+   # Create Status Frame Contents
+
+   $status_f->Label(
+      -text=>'Print Status: ',
+      -background=>$background,
+      )->pack(
+         -side=>'top',
+         -anchor=>'w',
+         );
+
+   $scrolly=$status_f->Scrollbar(
+      -orient=>'vert',
+      -borderwidth=>0,
+      -elementborderwidth=>1,
+      -highlightthickness=>0,
+      -background=>$buttonbackground,
+      -troughcolor=>$background,
+      -relief=>'flat',
+      )->pack(
+         -side=>'right',
+         -fill=>'y',
+         -padx=>0,
+         -pady=>0,
+         );
+
+   $status_t=$status_f->ROText(
+      -yscrollcommand=>['set', $scrolly],
+      -height=>4, 
+      -relief=>'sunken', 
+      -width=>'45',
+      -highlightthickness=>0,
+      -borderwidth=>1,
+      -background=>'white',
+      )->pack(
+         -side=>'top',
+         -fill=>'x',
+         -expand=>'yes',
+         -padx=>1,
+         -pady=>2,
+         );
+
+   $scrolly->configure(-command=>['yview', $status_t]);
+   &check_printer;
+}#sub
+
+#check the printer definition.  If it is set to a file, enable the file entry
+sub check_printer {
+  if ($printer_set =~ /Print to File/i) {
+      $file_e->configure(-state=>normal,-foreground=>$txtforeground);
+      }else{
+          $file_e->configure(-state=>disabled,-foreground=>'grey65');
+          }#else
+}#sub
+
+
+#send the file to the printer
+sub Do_Print {
+   $status_t->delete('0.0','end');
+   $status_t->update;
+   my $en_opts="";
+
+   $en_opts .= "-r " if ($CkBtn1_set == 1);
+   $en_opts .= "-2 " if ($CkBtn2_set == 1);
+   $en_opts .= "-C " if ($CkBtn3_set == 1);
+   $en_opts .= "-B " if ($CkBtn4_set == 1);
+   $en_opts .= "-c " if ($CkBtn5_set == 1);
+   $en_opts .= "-n$copies" if ($copies ne "");
+
+    if ($printer_set =~ /Print to File/i && $printfile !~/^ *$/) {
+       $Status=`$psprint $en_opts -f$size_set -o$printfile /tmp/dbgui.prt 2>&1`;
+       $status_t->insert('1.1', $Status);
+       }else{
+          $Status=`$psprint $en_opts -f$size_set -P$printer_set /tmp/dbgui.prt 2>&1`;
+          $status_t->insert('1.1', $Status);
+          }#else
+}#sub 
+
