@@ -47,6 +47,8 @@ DESCRIPTION
         
         The loaded checkpoint file is captured in the title bar.
         
+        column widths are shrunk to be as small as possible for a more efficient display
+         
         More probably.... :-)
 
 PREREQUISITES
@@ -54,15 +56,27 @@ PREREQUISITES
 
         'Tk Toolkit'
 
-        'DBI'
+        'DBI' $CPAN/authors/id/TIMB
         
         'DBD' (for your particular type of database server  sybase,oracle etc..) 
+            ex - for Sybase the module is: $CPAN/authors/id/MEWP/DBD-Sybase-xxx.tar.gz
+             
         
-        'Sort::Fields'
+        Note for Sybase:DBD users, Michael Peppler (author of the DBD:Sybase module)
+            has graciously furnished me with a pre-released version 0.20 of his DBD:sybase
+            module.  A change was made in this module which affects the column width data
+            extracted from Sybase.  Without this change, some columns (with a binary data
+            type or numeric) will have a different column width than the actual column width 
+            definition in the database table.   Since the column widths are longer than the
+            data and not shorter, the problem is mostly cosmetic (except for the value reported 
+            in the column header for the column width)..   Hopefully version 0.20 will be
+            in wide release soon.  
+        
+        'Sort::Fields' $CPAN/authors/id/JNH/Sort-Fields-xxx.tar.gz
 
-        'Tk::HistEntry'
+        'Tk::HistEntry'  $CPAN/authors/id/SREZIC/Tk-HistEntry-xxx.tar.gz
 
-        'Tk::PrintDialog'
+        'Tk::PrintDialog' (not on CPAN but included with this distro)
 
     CPAN/Administrative Fun/Educational
 
@@ -194,6 +208,7 @@ I hope you like DBGUI.  I use it every day... It has made my life a lot easier..
 
 DBGUI can be fetched from your local CPAN site - 
    $CPAN/authors/id/M/MS/MSCROGGIN 
+   
 or my home page - 
    http://home.swbell.net/mscroggi/
 
