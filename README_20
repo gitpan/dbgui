@@ -47,8 +47,6 @@ DESCRIPTION
         
         The loaded checkpoint file is captured in the title bar.
         
-        column widths are shrunk to be as small as possible for a more efficient display
-         
         More probably.... :-)
 
 PREREQUISITES
@@ -108,7 +106,9 @@ Use DB entry - Allows the user to enter or select the database to connect to onc
    A history of 60 entries is maintained.
 
 Max Rows entry - Allows the user to set the maximum rowcount for the db query/command.  
-   If 0 is used, no max rowcount will be set.
+   If 0 is used, no max rowcount will be set.  A "hidden" feature of this entry is if Mouse
+   button three is clicked, the value of maxrows is cycled from zero, 20, and any already
+   entered value (if it exists).  
 
 Snapshot slider - Allows the user to select and load "snapshots" of command parameters.  
    Four snapshots can be saved.  Snapshot 0 is automatically loaded and is always 
@@ -125,16 +125,25 @@ Method menubutton - Allows the user to enter or select the method which is used 
    less elegant and informative than using the sybase libraries.  The isql and sqsh 
    options were actually originally implemented to prove to doubting co-workers who 
    tended to blame dbgui if unexpected results were returned from a query.  It worked :-)
+
+Timeout slider - The timeout slider is used to set the timeout (IN SECONDS) for an executing
+   command.  
+   NOTE - If no data has yet to be returned from the executing command when the timer expires,
+      the DBGUI utility has no access to the process to terminate it.  Basically it is locked
+      out.  If data is being returned, then DBGUI has the opportunity to cancel the executing
+      command and process the already returned result sets..
    
-C buttons - The "C" buttons (there is one for each command line) is used to quickly clear
-   the associated command entry before data is entered or pasted.  These were implemented 
-   because I was constantly copying a command to the X clipboard from another window and
-   wanting to paste the command into the dbgui command entries.  Since these entries usually
-   had a previous command already in them, I would have to paste the command in, and then
-   delete old command from the command entry...   a real pain...   Now with a click of mouse
-   button one the command line is cleared and ready to be written into.  Mouse button
-   three will restore the command entry if you have accidentally cleared the wrong command
-   one.
+CTR buttons - The "Clear Trim Restore" buttons (there is one for each command line) is used 
+   to quickly 1. clear the entire associated command entry before data is entered or pasted.  
+   2. trim off the last element of the associated command , or 3. Restore the associated
+   command from the last "CTR" operation.  These were implemented  because I am constantly 
+   copying a command to the X clipboard from another window and wanting to paste the command 
+   into the dbgui command entries.  Since these entries usually had a previous command already 
+   in them, I would have to paste the command in, and then delete old command from the command 
+   entry...   a real pain...   Now with a click of mouse button one the command line is 
+   cleared and ready to be written into.  Mouse button two will chop off the last element on
+   the command line. Mouse button three will restore the command entry if you have accidentally 
+   cleared the wrong command one.
    
 Sel buttons - The Sel buttons sets the associated command entry as 'active'.  If a command
    entry is not active, it wont be executed, and the command entry text will be grayed out.
@@ -160,7 +169,10 @@ Rows: label - This displays the rowcount of the executed command.
 
 Cols: label - This displays the column count of the executed command.
 
-Sort: menubutton - This lets the user select a column to sort by.
+Sort: menubutton - This lets the user select a column to sort by.  A "hidden" feature of the sort
+   label is if mouse button three is clicked, sorting will be disabled for the next command
+   executed. Once a second command executed, the sort status is restored to normal. 
+   Mouse button one restores the default sort status.
 
 Rev radiobutton - Sets the sort to be a reverse sort.
 

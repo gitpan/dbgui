@@ -8,11 +8,11 @@
 ##  Parameters:  none                                                         ##
 ##                                                                            ##
 ## +++++++++++++++++++++++++++ Maintenance Log ++++++++++++++++++++++++++++++ ##
-## Tue Sep 1 02:30:59 GMT 1998  Monty Scroggins - Script created.  
-##    verified to work on RedHat Linux 5.1 and Solaris 2.6        
+## Tue Sep 1 02:30:59 GMT 1998  Monty Scroggins - Script created.
+##    verified to work on RedHat Linux 5.1 and Solaris 2.6 
 ##
 ## Mon Oct 9 16:00:54 GMT 1998   Added code to perform db commands other than
-##    select statements.  Changed listbox to text widget to accomodate 
+##    select statements.  Changed listbox to text widget to accomodate
 ##
 ## Sun Nov 1 18:39:51 GMT 1998  Many Enhancements - Snapshots, Print, Datatypes,
 ##    Enable/Disable Command Strings, remove/replace table header on queries,
@@ -69,7 +69,7 @@
 ################################################################################
 
 #the current version
-my $VERSION="2.1.1";
+my $VERSION="2.1.5";
 
 =head1 NAME
 
@@ -163,12 +163,14 @@ use DBI;
 use Sort::Fields;
 use Tk::PrintDialog;
 use Text::Wrap;
+use sigtrap;
 
 #perl variables
-$|=1; # set output buffering to off
-$[ = 0; # set array base to 0
-$, = ' '; # set output field separator
+$|=1;      # set output buffering to off
+$[ = 0;    # set array base to 0
+$, = ' ';  # set output field separator
 $\ = "\n"; # set output record separator
+$" = "\n"; #set the list element separator
 
 #The colors and such
 my $txtbackground="snow2";
@@ -193,7 +195,7 @@ my $busycolor="red2",
 my $unbusycolor='#009f00',
 my $savedialogcolor="#caC2BBBBA7A7";
 my $histlimit=100;
-my $delim='.@.';
+my $delim='!#!#!';
 #######################################################################
 #DBD module specific settings.  
 # in an attempt to make this program as portable as possible, I am setting
@@ -214,7 +216,6 @@ my $dbtypes="syb_types";
 my $resulttypes="syb_result_type";
 
 #ctlib defined datatypes as defined in cstypes.h 
-#a MAX of 5 characters!
 my %dbdatatypes=qw(  
    -1     illeg
     0     char
@@ -223,25 +224,25 @@ my %dbdatatypes=qw(
     3     lbin
     4     text
     5     image
-    6     tyint
+    6     tnyint
     7     smint
     8     int
     9     real
    10     float
    11     bit
    12     date
-   13     datd4
+   13     date4
    14     money
-   15     mony4
+   15     money4
    16     numer
-   17     decim
+   17     dec
    18     varch
-   19     varbn
+   19     varbin
    20     long
    21     sens
-   22     bdry
+   22     bndry
    23     void
-   24     ushrt
+   24     ushort
 );
 
 #######################################################################
@@ -286,6 +287,7 @@ snapshot3
 snapshot4
 srchstring
 method
+timeout
 );
 
 #a list of arrays that are saved in the checkpoint file
@@ -345,6 +347,12 @@ if (-e $checkpointfile) {
 #startup with the last data in the widgets
 $snapshot=0;
 
+#make sure the alarmstring is empty
+$alarmstring="";
+
+#make sure the initial setting for the app is to perform sorts
+$sortoverride=0;
+
 #a list of potentially dangerous commands that should be operator confirmed before being executed
 my @dangercmds=qw(
 update
@@ -364,11 +372,20 @@ if (!$maxrowcount) {
    $maxrowcount=1000;
    };
 
-#set the initial maxrowcount to 1000 if not defined  a nice number
+#set the initial method
 if (!$method) {
    $method="DBI/DBD";
    };
 
+#set the initial timeout for queries
+if (!$timeout) {
+   $timeout=30;
+   };
+
+#the alarm will trigger a cancel for the currently executing command
+$SIG{ALRM}=\&alarm_handler;
+
+#$SIG{ALRM} = sub { $sth && $sth->cancel; };
 #                                       Main Window     
 #------------------------------------------------------------------------------------------
 #
@@ -385,7 +402,7 @@ $LW->optionAdd("*Label*Background", "$labelbackground");
 $LW->optionAdd("*troughColor", "$troughbackground");
 $LW->optionAdd("*borderWidth", "1");
 $LW->optionAdd("*highlightThickness", "0");
-$LW->optionAdd("*font", "8x13bold");
+$LW->optionAdd("*font", "$winfont");
 $LW->optionAdd("*label*relief", "flat");
 $LW->optionAdd("*frame*relief", "flat");
 $LW->optionAdd("*button*relief", "raised");
@@ -424,11 +441,10 @@ $rowcolframe=$LW->Frame(
       -side=>'bottom',
       );
 
+##################### Begin frames for top row of elements  ####################
 
-#label frame for all of the labels and histentrys at the top
 my $labelframe=$listframeall->Frame(
    -borderwidth=>'0',
-   -relief=>'raised',
    )->pack(
       -fill=>'x',
       -expand=>0,
@@ -449,7 +465,6 @@ my $labelent1=$labelframe->Frame(
       );
 
 my $labelent2=$labelframe->Frame(
-   #-borderwidth=>'1',
    -relief=>'raised',
    -background=>$labelbackground,
    )->pack(
@@ -515,18 +530,6 @@ my $labelent7=$labelframe->Frame(
       -side=>'left',
       );
       
-$busymarker=$labelframe->Frame(
-   -relief=>'raised',
-   -width=>16,
-   -height=>16,
-   -background=>$unbusycolor,
-   )->pack(
-      -expand=>0,    
-      -pady=>2,
-      -padx=>2,
-      -side=>'right',
-      );    
-      
 my $labelent8=$labelframe->Frame(
    -relief=>'raised',
    -background=>$labelbackground,
@@ -537,6 +540,20 @@ my $labelent8=$labelframe->Frame(
       -padx=>0,
       -side=>'left',
       );
+
+$busymarker=$labelframe->Frame(
+   -relief=>'raised',
+   -width=>16,
+   -height=>16,
+   -background=>$unbusycolor,
+   )->pack(
+      -expand=>0,
+      -pady=>2,
+      -padx=>2,
+      -side=>'right',
+      );    
+      
+##################### end top row of elements  ####################
         
 my $listframe1=$listframeall->Frame(
    -borderwidth=>'0',
@@ -548,9 +565,8 @@ my $listframe1=$listframeall->Frame(
       -padx=>0,
       );
     
-#the labels frame across the top
 ##############################################    
-#                              query strings
+#  query string parameters
 $labelent1->Label(
    -text=>'DB Server',
    -width=>$toplabelwidth,
@@ -592,11 +608,7 @@ $dbserventry=$servhistframe->HistEntry(
       -fill=>'x',
       );
 
-$dbserventry->bind('<Return>'    => \&check_cmd); 
-$dbserventry->bind('<Up>'        => sub { $dbserventry->historyUp });
-$dbserventry->bind('<Control-p>' => sub { $dbserventry->historyUp });
-$dbserventry->bind('<Down>'      => sub { $dbserventry->historyDown });
-$dbserventry->bind('<Control-n>' => sub { $dbserventry->historyDown });
+$dbserventry->bind('<Return>'=>\&check_cmd); 
 $dbserventry->history([@dbservhist]);
 
 $labelent2->Label(
@@ -640,11 +652,7 @@ $dbuserentry=$userhistframe->HistEntry(
       -fill=>'x',
       );
 
-$dbuserentry->bind('<Return>'    => \&check_cmd); 
-$dbuserentry->bind('<Up>'        => sub { $dbuserentry->historyUp });
-$dbuserentry->bind('<Control-p>' => sub { $dbuserentry->historyUp });
-$dbuserentry->bind('<Down>'      => sub { $dbuserentry->historyDown });
-$dbuserentry->bind('<Control-n>' => sub { $dbuserentry->historyDown });
+$dbuserentry->bind('<Return>'=> \&check_cmd); 
 $dbuserentry->history([@dbuserhist]);
 
 $labelent3->Label(
@@ -690,11 +698,7 @@ $dbpassentry=$passhistframe->HistEntry(
       -fill=>'x',
       );
     
-$dbpassentry->bind('<Return>'    => \&check_cmd); 
-$dbpassentry->bind('<Up>'        => sub { $dbpassentry->historyUp });
-$dbpassentry->bind('<Control-p>' => sub { $dbpassentry->historyUp });
-$dbpassentry->bind('<Down>'      => sub { $dbpassentry->historyDown });
-$dbpassentry->bind('<Control-n>' => sub { $dbpassentry->historyDown });
+$dbpassentry->bind('<Return>'=>\&check_cmd); 
 $dbpassentry->history([@dbpasshist]);
 
 
@@ -739,11 +743,7 @@ $dbuseentry=$dbusehistframe->HistEntry(
       -fill=>'x',
       );
       
-$dbuseentry->bind('<Return>'    => \&check_cmd); 
-$dbuseentry->bind('<Up>'        => sub { $dbuseentry->historyUp });
-$dbuseentry->bind('<Control-p>' => sub { $dbuseentry->historyUp });
-$dbuseentry->bind('<Down>'      => sub { $dbuseentry->historyDown });
-$dbuseentry->bind('<Control-n>' => sub { $dbuseentry->historyDown });
+$dbuseentry->bind('<Return>'=>\&check_cmd); 
 $dbuseentry->history([@dbusehist]);
 
 $labelent5->Label(
@@ -773,7 +773,24 @@ my $maxrowentry=$labelent5->Entry(
       );
     
 $maxrowentry->bind('<Return>'=>\&check_cmd); 
-
+#use button three to toggle between two often used values and a third number (hidden feature)
+$maxrowentry->bind('<Button-3>'=>sub{
+   my $tmaxcount=$maxrowcount;
+   if ($tmaxcount !=0 && $tmaxcount !=20) {
+      $savmaxcount=$maxrowcount;
+      $maxrowcount=0;
+      } 
+   if ($tmaxcount==0) {
+      $maxrowcount=20;
+      }
+   if ($tmaxcount==20) {
+      if (!$savmaxcount) {
+         $savmaxcount=0;
+         }
+      $maxrowcount=$savmaxcount;
+      }
+   });
+   
 $labelent6->Label(
    -text=>'Snapshot',
    -width=>$toplabelwidth, 
@@ -870,6 +887,50 @@ $methodmenu->command(
    -background=>$background,
    );
 
+$labelent8->Label(
+   -text=>'Timeout',
+   -width=>$toplabelwidth,
+   )->pack(
+      -fill=>'y', 
+      -side=>'top',
+      -padx=>0,
+      -expand=>0,
+      );
+
+$labelent8->Label(
+   -textvariable=>\$timeout,
+   -width=>3,
+   -background=>$txtbackground,
+   -relief=>'sunken',
+   )->pack(
+      -side=>'right',
+      -expand=>1,
+      -padx=>1,
+      -pady=>1,
+      -fill=>'y',
+      );
+
+# the highth is controlled with the width  option.  The slider width is the sliderlength
+my $timescale=$labelent8->Scale(
+   -variable=>\$timeout,
+   -orient=>'horizontal',
+   -label=>'',
+   -from=>10,
+   -to=>600,
+   -length=>70,    
+   -troughcolor=>$txtbackground,
+   -sliderlength=>12,
+   -width=>19,
+   -showvalue=>0,
+   -resolution=>10,
+   -borderwidth=>1,
+   )->pack(
+      -side=>'bottom',
+      -padx=>0,
+      -pady=>0,
+      -fill=>'y', 
+      );
+$timescale->bind('<Return>'=> \&check_cmd); 
 
 ##############################################
 #query strings
@@ -885,8 +946,8 @@ my $qs1frame=$listframe1->Frame(
       );
       
 my $clr1=$qs1frame->Button(
-   -text=>"C",
-   -width=>1,
+   -text=>"CTR",
+   -width=>2,
    -command=>sub{
       if ($querystring1 ne "") {
          $qs1sav=$querystring1;
@@ -899,16 +960,30 @@ my $clr1=$qs1frame->Button(
       -fill=>'y',
       );     
 
+#use button two to chop off the last word
+$clr1->bind('<Button-2>'=>sub{
+   $qs1sav=$querystring1;
+   $querystring1=~s/\ *$//;
+   my $trimword1=(split(/ /,$querystring1))[-1];
+   if ($trimword1 ne "") {
+      $querystring1=~s/\Q$trimword1\E$//;
+      }
+   });
+   
 #use button three to restore the clear operation
-$clr1->bind('<Button-3>'=>sub{if ($qs1sav) {$querystring1=$qs1sav}});
+$clr1->bind('<Button-3>'=>sub{
+   if ($qs1sav) {
+      $querystring1=$qs1sav;
+      }
+   });
 
 $qscheck1=$qs1frame->Checkbutton(
    -variable=>\$qsactive1,
-   -text=>"Sel",
+   -text=>"S",
    -background=>$buttonbackground,
    -borderwidth=>1,
    -selectcolor=>'red4',
-   -width=>4,
+   -width=>2,
    -offvalue=>0,
    -onvalue=>1,
    -command=>sub{&act_deactivate("qsentry1","qsactive1")},
@@ -937,11 +1012,7 @@ $qsentry1=$qs1frame->HistEntry(
       -pady=>1,
       );
 
-$qsentry1->bind('<Return>'    => \&check_cmd); 
-$qsentry1->bind('<Up>'        => sub { $qsentry1->historyUp });
-$qsentry1->bind('<Control-p>' => sub { $qsentry1->historyUp });
-$qsentry1->bind('<Down>'      => sub { $qsentry1->historyDown });
-$qsentry1->bind('<Control-n>' => sub { $qsentry1->historyDown });
+$qsentry1->bind('<Return>'=>\&check_cmd); 
 $qsentry1->history([@queryhist1]);
 
 my $qs2frame=$listframe1->Frame(
@@ -954,8 +1025,8 @@ my $qs2frame=$listframe1->Frame(
       );
          
 my $clr2=$qs2frame->Button(
-   -text=>"C",
-   -width=>1,
+   -text=>"CTR",
+   -width=>2,
    -command=>sub{
       if ($querystring2 ne "") {
          $qs2sav=$querystring2;
@@ -967,17 +1038,31 @@ my $clr2=$qs2frame->Button(
       -padx=>0,
       -fill=>'y',
       );   
-      
+
+#use button two to chop off the last word
+$clr2->bind('<Button-2>'=>sub{
+   $qs2sav=$querystring2;
+   $querystring2=~s/\ *$//;
+   my $trimword2=(split(/ /,$querystring2))[-1];
+   if ($trimword2 ne "") {
+      $querystring2=~s/\Q$trimword2\E$//;
+      }
+   });
+         
 #use button three to restore the clear operation
-$clr2->bind('<Button-3>'=>sub{if ($qs2sav) {$querystring2=$qs2sav}});
+$clr2->bind('<Button-3>'=>sub{
+   if ($qs2sav) {
+      $querystring2=$qs2sav;
+      }
+   });
 
 $qscheck2=$qs2frame->Checkbutton(
    -variable=>\$qsactive2,
    -relief=>'raised',
-   -text=>"Sel",
+   -text=>"S",
    -background=>$buttonbackground,
    -selectcolor=>'red4',
-   -width=>4,
+   -width=>2,
    -offvalue=>0,
    -onvalue=>1,
    -command=>sub{&act_deactivate("qsentry2","qsactive2")},
@@ -1006,11 +1091,7 @@ $qsentry2=$qs2frame->HistEntry(
       -pady=>1,
       );
     
-$qsentry2->bind('<Return>'    => \&check_cmd); 
-$qsentry2->bind('<Up>'        => sub { $qsentry2->historyUp });
-$qsentry2->bind('<Control-p>' => sub { $qsentry2->historyUp });
-$qsentry2->bind('<Down>'      => sub { $qsentry2->historyDown });
-$qsentry2->bind('<Control-n>' => sub { $qsentry2->historyDown });
+$qsentry2->bind('<Return>'=>\&check_cmd); 
 $qsentry2->history([@queryhist2]);
 
 my $qs3frame=$listframe1->Frame(
@@ -1019,12 +1100,12 @@ my $qs3frame=$listframe1->Frame(
       -expand=>0,
       -pady=>0,
       -padx=>0,
-      -fill=>'x',         
+      -fill=>'x',
       );
          
 my $clr3=$qs3frame->Button(
-   -text=>"C",
-   -width=>1,
+   -text=>"CTR",
+   -width=>2,
    -command=>sub{
       if ($querystring3 ne "") {
          $qs3sav=$querystring3;
@@ -1036,16 +1117,31 @@ my $clr3=$qs3frame->Button(
       -padx=>0,
       -fill=>'y',
       );         
+
+#use button two to chop off the last word
+$clr3->bind('<Button-2>'=>sub{
+   $qs3sav=$querystring3;
+   $querystring3=~s/\ *$//;
+   my $trimword3=(split(/ /,$querystring3))[-1];
+   if ($trimword3 ne "") {
+      $querystring3=~s/\Q$trimword3\E$//;
+      }
+   });
+
 #use button three to restore the clear operation
-$clr3->bind('<Button-3>'=>sub{if ($qs3sav) {$querystring3=$qs3sav}});
+$clr3->bind('<Button-3>'=>sub{
+   if ($qs3sav) {
+      $querystring3=$qs3sav;
+      }
+   });
 
 $qscheck3=$qs3frame->Checkbutton(
    -variable=>\$qsactive3,
    -relief=>'raised',
-   -text=>"Sel",
+   -text=>"S",
    -background=>$buttonbackground,
    -selectcolor=>'red4',
-   -width=>4,
+   -width=>2,
    -offvalue=>0,
    -onvalue=>1,
    -command=>sub{&act_deactivate("qsentry3","qsactive3")},
@@ -1074,11 +1170,7 @@ $qsentry3=$qs3frame->HistEntry(
       -pady=>1,
       );
     
-$qsentry3->bind('<Return>'    => \&check_cmd); 
-$qsentry3->bind('<Up>'        => sub { $qsentry3->historyUp });
-$qsentry3->bind('<Control-p>' => sub { $qsentry3->historyUp });
-$qsentry3->bind('<Down>'      => sub { $qsentry3->historyDown });
-$qsentry3->bind('<Control-n>' => sub { $qsentry3->historyDown });
+$qsentry3->bind('<Return>'=>\&check_cmd); 
 $qsentry3->history([@queryhist3]);
 
 #padding for spacing between the query strings and the output Text widget
@@ -1200,6 +1292,17 @@ $rowcolframe->Label(
       -fill=>'y',
       );
 
+$rowcolframe->Label(
+   -textvariable=>\$alarmstring,
+   -foreground=>$rowcolcolor,
+   -background=>$background,
+   -relief=>'flat',
+   )->pack(
+      -side=>'left',
+      -fill=>'x',
+      -padx=>0,
+      -pady=>0,
+      );
 
 
 my $sortframe=$buttonframe->Frame(
@@ -1212,6 +1315,7 @@ my $sortframe=$buttonframe->Frame(
       -fill=>'x',      
       );
          
+#bindings for this label are below the sortbyentry declaration
 my $sortlabel=$sortframe->Label(
    -text=>'Sort:',
    -relief=>'flat',
@@ -1222,7 +1326,7 @@ my $sortlabel=$sortframe->Label(
       -padx=>0,
       -pady=>$ypad,
       );
-
+      
 #the sortby textvariable will be configured after the window is created.
 my $sortbyentry=$sortframe->Optionmenu(
    -background=>$buttonbackground,
@@ -1235,6 +1339,19 @@ my $sortbyentry=$sortframe->Optionmenu(
       -padx=>0,
       -fill=>'both',
       );
+
+#use button three disable sorting for the next command only. (hidden feature)
+#the sort settings are restored after the initial execution
+$sortlabel->bind('<Button-1>'=>sub{
+   $sortoverride=0;
+   $sortlabel->configure(-foreground=>$txtforeground);
+   $sortbyentry->configure(-state=>'normal');
+   });
+$sortlabel->bind('<Button-3>'=>sub{
+   $sortoverride=1;
+   $sortlabel->configure(-foreground=>'grey65');
+   $sortbyentry->configure(-width=>24,-justify=>'left',-state=>'disabled');
+   });
 
 my $revsortbutton=$sortframe->Checkbutton(
    -variable=>\$reversesort,
@@ -1432,7 +1549,6 @@ my $tscrolly=0.0;
 $sortby="     ";
 $sortbyentry->configure(-textvariable=>\$sortby);
 
-
 MainLoop();
 
 #                                         subroutines     
@@ -1444,9 +1560,10 @@ sub clone_data {
    ($clscrollx,$rest)=$queryout->xview;
    ($clscrolly,$rest)=$queryout->yview;
    #The main clone window
-   my $CW=new MainWindow(-title=>"Cloned Data - $clonedate");
+   $CW->destroy if Exists($CW);
+   $CW=new MainWindow(-title=>"Cloned Data - $clonedate");
    #set a minimum size so the window cant be resized down to mess up the cancel button
-   $CW->minsize(854,214);
+   $CW->minsize(854,244);
    #The top frame for the text
    my $cloneframe1=$CW->Frame(
       -borderwidth=>'0',
@@ -1530,7 +1647,7 @@ sub clone_data {
          -fill=>'both',
          );
 
-   $hscrolly->configure(-command => ['yview', $clonewin]);
+   $hscrolly->configure(-command => ['yview',$clonewin]);
    $hscrollx->configure(-command=>\&my_clonexscroll);
 
    $cloneframe2->Label(
@@ -1539,7 +1656,7 @@ sub clone_data {
       -background=>$background,
       -foreground=>$txtforeground,
       -font=>$winfont,
-      -relief=>'flat'
+      -relief=>'sunken'
       )->pack(
          -side=>'left',
          -padx=>3,
@@ -1596,27 +1713,23 @@ sub clone_data {
          -fill=>'y',
          );
 
-   #if there has been more than one resultcount returned, dont display the header 
-   #$testhdata=$queryheader->get('0.0','end');
-   my @theaderdata=$queryheader->get('0.0','end');
+   #if there has been more than one resultcount returned, dont display the header    
    if ($resultcount==1) {
-      #ensure there are no trailing spaces on the header to mess up the alignment with the data
-      foreach (@theaderdata) {
-         $_=~s/ +\n +/\n/g;
-         }
-      $cloneheader->insert('end',@theaderdata);
-      }
-   $cloneheader->tag('add','clonedbtype',"2.0","2.0 + 1 line");
-   $cloneheader->tag('configure','clonedbtype',
-      -foreground=>$datatypeforeground,
-      ); 
-   if ($resultcount>1||$theaderdata[0]!~/\w/) {            
-      $cloneheader->packForget;
-      };
-   my @tquerydata=$queryout->get('0.0','end');
-   $clonewin->insert('end',@tquerydata);
+      my @tdata=$queryheader->get('0.0','end');
+      chomp $tdata[0];
+      $cloneheader->insert('end',@tdata[0]);
+      $cloneheader->insert('end',@tdata[1]);
+      $cloneheader->tag('add','clonedbtype',"2.0","2.0 + 1 line");
+      $cloneheader->tag('configure','clonedbtype',
+         -foreground=>$datatypeforeground,
+         ); 
+      }else{           
+         $cloneheader->packForget;
+         };
+   my @tdata=$queryout->get('0.0','end');
+   $clonewin->insert('end',@tdata);
    #generate the status string for the clone window
-   $clonestat=" Rows: $dbrowcount   Cols: $dbcolcount   Server: $dbserver  Database: $dbuse  MaxRows: $maxrowcount ";
+   $clonestat=" S:$dbserver  R:$dbrowcount  C:$dbcolcount  DB:$dbuse  MR:$maxrowcount  Meth:$method  Sort:$sortby ";
    $savsqlstring=~s/^ +//;
    $savsqlstring=~s/ +$//;
    $cldbcmd->command(
@@ -1661,6 +1774,9 @@ sub operconfirm {
 
 #connect with the server and execute the proper command
 sub check_cmd {
+   $alarmstring="";
+   $dbrowcount="";
+   $dbcolcount="";
    #collect the x scroll setting so it can be resumed after the sort
    ($tscrollx,$rest)=$queryout->xview;
    ($tscrolly,$rest)=$queryout->yview;
@@ -1717,50 +1833,58 @@ sub check_cmd {
       #dbcommand and skip all of the other stuff
       &checkpoint;
       if ($method eq "Isql"||$method eq "Sqsh") {
+         $" = ""; #set the list element separator
          &run_isql_cmd;
          &setunbusy;
          return;
          }
+      $" = "\n"; #set the list element separator
       &run_query;
       }#if confirm eq OK
-   &setunbusy;
 }#sub check_cmd
 
 #sub to actually execute a DB query. the run_command routine execs all other DB commands
 #with the messagehandler, there is no need to check each command for successful status
 sub run_query {
-   my ($dbh,$sth,$status);
+   #these must be localized
+   my ($dbh,$status);
    #connect to the database and run the command
-   $dbh=DBI->connect("dbi:$servertype:server=$dbserver;logintimeout=120;timeout=240",$dbuser,$dbpass);
+   $dbh=DBI->connect("dbi:$servertype:server=$dbserver",$dbuser,$dbpass);
    #if the login info is bad, complain and quit.  The error handler posts the errors returned
-   #from the libraries.  No need to add to them
+   #from the libraries.  No need to add to them inmanually (except for the initial $dbh connection
    if (!$dbh) {
-      $queryout->insert('end',"\n Open Connection to Database Server Failed..\n\n");
-      return;
+      $queryheader->packForget;
+      $queryout->insert('end',"\n ERROR:\n\n A connection to database server was unable to be established..\n");
+      $queryout->insert('end',"\n Please check the username, password and servername etc..\n\n");
+      &setunbusy;
+      return(1);
       }#if !dbh
    $dbh->{$errorhandler}=\&err_handler;
    if (int($maxrowcount)>0) {
       $status=$dbh->do("set rowcount $maxrowcount");
       if ($status==0) {
-         $queryout->insert('end',"\n Set Rowcount Statement Failed..\n\n");
+         $queryheader->packForget;
          return;
          }#if status eq 0
       }#if ($maxrowcount=~/\d+/) {
    #if the dbuse variable is not set to default, specifically set it.
-   if ($dbuse !~ /default/i) {
+   if ($dbuse !~ /^default$/i) {
       $status=$dbh->do("use $dbuse"); 
       if ($status==0) {
-         return(1);
+         $queryheader->packForget;
+         return;
          }#if status eq 0
       }#if dbuse is not default
    $resultcount=0;
-   $skipsort=0;
    @sortbyhist=();
    $sth=$dbh->prepare($sqlstring);
    $sth->execute;
-   #if an error occured, the error handler will post the error text to the user, All that needs to be
-   #done here is to return.
+   # schedule alarm in $timeout seconds
+   alarm($timeout);
+   #if an error occured, the error handler will post the error text to the user, All that needs to 
+   #be done here is to return.
    if ($sth->err) {
+      alarm();
       return 1;
       }
       
@@ -1769,16 +1893,18 @@ sub run_query {
       @sortbyhisttemp=@sortbyhist;
       my @tempdbretrows="";
       $spstat=$sth->{$resulttypes};
-      #if no status is returned , dont attempt to parse the results..  
+      #if no status is returned , dont attempt to parse the results..
       #This happens when a db command is executed that returns
-      #no data - like truncate etc..
+      #no data - like truncate etc..  Set to an unbusy state and return
       if (!$spstat) {
+         &setunbusy;
+         alarm();
          return(0);
-         }
+         }            
       #get the column names   
       my $colnames=$sth->{NAME};
       #get the column widths
-      my $colsizes=$sth->{PRECISION};      
+      my $colsizes=$sth->{PRECISION};
       #get the column datatypes
       my $coltypes=$sth->{$dbtypes};
       
@@ -1804,7 +1930,7 @@ sub run_query {
          #collect the length of the column header string
          $hlength{$i}=length($colheader);
          
-         #check to see if the column length string is longer, if so use it for the column         
+         #check to see if the column length string is longer, if so use it for the column 
          my $clength=length($dispcollength);
          if ($clength > $hlength{$i}) {
             $hlength{$i}=$clength;
@@ -1821,7 +1947,7 @@ sub run_query {
       push(@tempdbretrows,"$divider");
       ################################## pull in the data ###################################
       #for each row returned from the query..
-      # for each row of data returned    #
+      # for each row of data returned
       while($dbdata=$sth->fetch) {
          #Pull together the data returned for sorting and display  
          my $dbrowstring="";
@@ -1845,7 +1971,6 @@ sub run_query {
             }#foreach @dbdata
          push(@tempdbretrows,"$dbrowstring");
       }#while ($d=$sth->fetch)
-
       #now all data has been collected for the resultset, pad the data to fit the calculated column
       #widths and push the final data onto the real data array
       for($z=0; $z<scalar(@tempdbretrows); ++$z) {
@@ -1861,8 +1986,9 @@ sub run_query {
                   $operstring.="-";
                   }
                }#if ($operstring eq "!!rsdim") 
-            $operstring=sprintf("%-$hlength{$i}\s",$operstring);                 
-            $finalout="$finalout$operstring | ";                     
+            #pad the operstring with spaces
+            $operstring=sprintf("%-$hlength{$i}\s",$operstring);
+            $finalout="$finalout$operstring | ";
             }#for($i=0; $i<scalar(@elements); ++$i)
          push (@dbretrows, "$finalout");
          }#for($z=0; $z<scalar(@tempdbretrows;
@@ -1870,22 +1996,21 @@ sub run_query {
       push (@dbretrows, " ");
       $resultcount++;
       }while($sth->{syb_more_results});
+   # cancel the alarm
+   alarm(); 
    $dbh->disconnect;
-
    #4043 is the status from the server for the sql command.  It is returned as a separate result
    #set.  If it is detected, chop the data out of the final data and remove the column from the 
    #sort history
    if ($spstat==4043) {
       splice(@dbretrows,-5,5);
       @sortbyhist=@sortbyhisttemp;
-      #splice(@sortbyhist,-1,1);
       $resultcount--;
       }
       
    #if only one resultset has been returned, populate and display the pretty header
    #otherwise display the plain db text
    if ($resultcount==1 && $skipsort==0) {
-      $queryheader->delete('0.0','end');
       #take off the first few elements of the retrows array until real data is encountered
       #or until there is no data on the array at all (like when a truncate command etc is executed)
       until ($dbretrows[0]=~/^\w+/||!$dbretrows[0]) {
@@ -1894,12 +2019,10 @@ sub run_query {
       until ($dbretrows[0] !~/^ *$/) {
          splice(@dbretrows,0,1);
          }
-      #move the header info from the dbretrows array into the queryheader textbox
-      #the header and data have to be repacked in order, otherwise they get flipped
-      $queryheader->insert('end',"$dbretrows[0]\n");
-      $queryheader->insert('end',"$dbretrows[1]");
-      splice(@dbretrows,0,3);
-      #set query state so sorts etc are allowed   
+      #save off the header strings to be displayed just before the data   
+      $qhstring1="$dbretrows[0]";
+      $qhstring2="$dbretrows[1]";
+      splice(@dbretrows,0,3); 
       }#if ($resultcount==1 && $skipsort==0)
    &sortby;
    }#sub run_query
@@ -1943,7 +2066,6 @@ sub setunbusy {
 sub set_query_state {
    $queryheader->pack(@headerinfo);
    $queryout->pack(@datainfo);
-   $sortlabel->configure(-foreground=>$txtforeground);
    $colnumlabel->configure(-foreground=>$txtforeground);
    $rownumlabel->configure(-foreground=>$txtforeground);  
    $revsortbutton->configure(-state=>'normal',-selectcolor=>'red4');
@@ -1958,7 +2080,16 @@ sub set_query_state {
    #sometimes the menu would be doubled up - caused by invoking the menubutton when it is configured.
    #clearing them menu and then reconfiguring it works around this behavior.  ugh..
    $sortbyentry->configure(-options=>\@empty);
-   $sortbyentry->configure(-options=>\@sortbyhist,-width=>24,-justify=>'left',-state=>'normal');
+   $sortbyentry->configure(-options=>\@sortbyhist,-width=>24,-justify=>'left');
+   if ($sortoverride==0) {
+      $sortlabel->configure(-foreground=>$txtforeground);
+      $sortbyentry->configure(-state=>'normal');
+      }else{
+         $sortlabel->configure(-foreground=>'grey65');
+         $sortbyentry->configure(-width=>24,-justify=>'left',-state=>'disabled');
+         }
+   #set the sort override off, the override is only good for one command execution
+   $sortoverride=0;
    }#sub
 
 #configure colors to make these labels and the sort checkboxes unavailable
@@ -1974,6 +2105,9 @@ sub set_command_state {
    $dbrowcount="";
    $dbcolcount="";
    $sortbyentry->configure(-width=>24,-justify=>'left',-state=>'disabled');
+   #set the skipsort flag to 0 for the next time that a db command is executed.
+   #the manual override for sorting only lasts for one command execution
+   $skipsort=0;
    }#sub
 
 #the sort routine can be called standalone, so it is splitout of the run_query routine,
@@ -1982,17 +2116,26 @@ sub set_command_state {
 sub sortby {
    #execute the sort ONLY if 1 result set has been returned and the skipsort flag is 0
    if ($resultcount==1 && $skipsort==0) {
+      &setbusy;
       #my $sortindex;
       #detect whether the scrollbars have moved since the db command was executed.  If so,
       #use the current positions, otherwise use the original ones from the check_cmd subroutine
-      ($sortscrollx,$rest)=$queryout->xview;
-      if ($tscrollx ne $sortscrollx&&$sortscrollx>0) {
-         $tscrollx=$sortscrollx;
-         }
+#       ($sortscrollx,$rest)=$queryout->xview;
+#       print "sortscrollx ($sortscrollx,$rest)";
+#       if ($tscrollx ne $sortscrollx&&$sortscrollx>0) {
+#          $tscrollx=$sortscrollx;
+#          }
+# #       if ($sortscrollx==0) {
+#          print "zero";
+#          print "sortscrollx ($sortscrollx)";
+#          #$tscrollx=0;
+#          }  
+         
       ($sortscrolly,$rest)=$queryout->yview;
       if ($tscrolly ne $sortscrolly&&$sortscrolly>0) {
          $tscrolly=$sortscrolly;
          }
+         
       if ($sortby=~/^ *$/) {
          $sortby=$sortbyhist[0];
          }
@@ -2019,52 +2162,45 @@ sub sortby {
       #dont really execute the sort unless the sortby variable is set.  This is to keep
       #from double sorting.  Once when sortby is called and again when the sortbyentry
       #optionmenu is configured with the sort items     
-      if ($sortby) {
+      if ($sortby&&$sortoverride==0) {
          #execute the sort 
          @dbretrows=fieldsort '\|',[$sortindex],@dbretrows;
-         #remove the first element if it is an empty line from the sort
-         until ($dbretrows[0] !~/^ *$/||$#dbretrows==-1) {
-            splice(@dbretrows,0,1);
-            }
-         $queryout->delete('0.0','end');
          }#if sortby
-      }#if resultcount ==1
-   $dbrowcount=0;
+      #populate the header just before the data fields
+      $queryheader->delete('0.0','end');
+      $queryheader->insert('end',"$qhstring1\n$qhstring2");
+      #since we can now override the sort, scan the entire results for a null line or a 
+      #line of spaces and remove them from the data.  When the sort was always forced,
+      #these rows were always at the start of the data, now they are not
+      for($x=0; $x<=$#dbretrows; ++$x) { 
+         if ($dbretrows[$x]=~/^\s*$/) {
+            splice(@dbretrows,$x,1);
+            $x--;
+            }#if
+         }#for
+      }#if resultcount ==1;
    #post the results regardless of whether or not a sort is being executed
-   for ($t=0; $t<scalar(@dbretrows); $t++) {
-      if ($dbretrows[$t] ne "") {
-         #remove any accidental tabs found in the data and replace with a single space
-         #since I calculate the widths of the columns by the number of characters, tabs
-         #only get counted as a single character.  It is safe to remove them and replace with
-         #a single space without worrying about mis-aligned columns
-         $dbretrows[$t]=~s/\t/ /g;
-         $dbrowcount++;
-         $queryout->insert('end',"$dbretrows[$t]\n");
-         }#if dbretrows
-      }#for ($t=0; $t<scalar(@dbretrows); $t++)
+   $queryout->delete('0.0','end');
+   $queryout->insert('end',"@dbretrows\n");
    #check the header to see if it contains any real data.  This is for thos sp_commands that only
    #return one resultset, but dont have a  structured table style output, therefore we need to treat
    #the data like a command not a table.   ex - sp_lock
    my $testhdata=$queryheader->get('0.0','end');
    #if only one result was returned set the query state, otherwise set the command state
    if ($resultcount==1&&$testhdata=~/\w/) {
-      #it is easier and more accurate to get the final row and column counts from the actual
-      #data being displayed. 
-      $dbcolcount=-1;
-      foreach (split(/\|/,"$dbretrows[0]")) {
-         $dbcolcount++;
-         }
-      if ($dbcolcount <0) {
-         $dbcolcount=0;
-         }
       &set_query_state;
+         $dbrowcount=($#dbretrows+1);
+         $dbcolcount=(split(/\|/,"$dbretrows[0]")-1);
+         if ($dbcolcount <0) {
+            $dbcolcount=0;
+            }
       }else{
          &set_command_state
          }
    $queryheader->xview(moveto=>$tscrollx);
    $queryout->xview(moveto=>$tscrollx);
    $queryout->yview(moveto=>$tscrolly);
-   $queryout->update;
+   &setunbusy;
    }#sub sortby
 
 #write out the returned query information to an ascii file 
@@ -2073,7 +2209,7 @@ sub savit {
    if ($outfile eq "") {
       $savebutton->configure(-state=>'normal');
       my @types =
-      (["Log files ",          ['.out']],
+      (["Out files ",          ['.out']],
        ["Text files",          ['.txt']],
        ["All files ",          ['*']],
       ); 
@@ -2211,7 +2347,7 @@ sub take_snapshot {
       #needed to properly save the values off in the checkpoint file 
       $_ =~ s/\\*\'/\\\'/g;
       #substitute double quotes for escaped ones
-      $_=~s/\"/\\\"/g;    
+      $_=~s/\\*\"/\\\"/g;
       }
         
    #collect all other variables for the snapshot string
@@ -2220,7 +2356,7 @@ sub take_snapshot {
       next if (/^snapshot/);
       $snapshotstring.="\$$_=\'$$_\'\;"
       }  
-   ${$tsnap}=$snapshotstring;   
+   ${$tsnap}=$snapshotstring;
    &run_snapshot("$snapnum");
    }#sub snapshot
 
@@ -2264,7 +2400,7 @@ sub checkpoint {
       my $arraystring="\@$arrayname=(\n";
       foreach (@{$arrayname}) {
          #substitute double quotes for escaped ones
-         $_=~s/\"/\\\"/g;          
+         $_=~s/\\*\"/\\\"/g;          
          #substitute @ symbols for escaped ones
          $_=~s/\@/\\\@/g;         
          $arraystring.="\"$_\",\n";
@@ -2289,28 +2425,6 @@ sub act_deactivate {
     ${$querywid}->update;
    }#sub
 
-#error handler taken from subutil.pl in the sybperl distribution.  Needed to trap
-#the error strings returned for non DB type
-sub err_handler {
-   my ($err, $severity, $state, $line, $server, $proc, $msg)= @_;
-   #print "($err, $severity, $state, $line, $server, $proc, $msg)";
-   # Check the error code to see if we should report this.   
-   if ($severity >=10 && $err>0) {
-      $msg=wrap(" "," ","$msg");
-      $queryout->insert('end',"Error:$err\nProcedure:$proc\nLine:$line\nState:$state\nSeverity:$severity\n\n$msg");
-      $skipsort=1;
-      &set_command_state;
-      #return 1;
-      }
-   #handle data that is returned from a print statement like form the sp_helpcode proc   
-   if ($err==0 && $msg !~/^ *$/) {
-      return if ($msg =~/^Message empty/);
-      push(@dbretrows,"$msg");
-      $skipsort=1;
-      return 0;
-      }
-}#sub error_handler
-
 #query results search dialog
 sub searchit {
    $srchstring="";
@@ -2322,7 +2436,7 @@ sub searchit {
    $SW->optionAdd("*frame*relief", "flat");
    $SW->optionAdd("*font", "8x13bold");
    
-   #width,height in pixels    
+   #width,height in pixels
    $SW->minsize(424,51);
    $SW->maxsize(724,51);
 
@@ -2381,7 +2495,7 @@ sub searchit {
          -expand=>0,
          -pady=>0,
          -padx=>1,
-         -fill=>'x', 
+         -fill=>'x',
          );
       
     $ssentry=$searchhistframe->HistEntry(
@@ -2408,11 +2522,7 @@ sub searchit {
          );
 
    #press enter and perform a single fine
-   $ssentry->bind('<Return>'    => \&find_one);
-   $ssentry->bind('<Up>'        => sub { $ssentry->historyUp });
-   $ssentry->bind('<Control-p>' => sub { $ssentry->historyUp });
-   $ssentry->bind('<Down>'      => sub { $ssentry->historyDown });
-   $ssentry->bind('<Control-n>' => sub { $ssentry->historyDown });
+   $ssentry->bind('<Return>'=>\&find_one);
    $ssentry->history([@searchhist]);
 
    $searchframe2->Button(
@@ -2456,7 +2566,7 @@ sub searchit {
          -side=>'right',
          -padx=>2,
          );
-   $ssentry->invoke;      
+   $ssentry->invoke;
    $ssentry->focus;
 } # sub search
 
@@ -2470,11 +2580,11 @@ sub find_all {
    $stringlength=length($srchstring);
    $searchcount=0;
    while (1) {
-      if ($caseflag eq "case") {  
-         $current=$queryout->search(-exact,$srchstring,$current,'end');
+      if ($caseflag eq "case") {
+         $current=$queryout->search(-exact,"$srchstring",$current,'end');
          }else{
-            $current=$queryout->search(-nocase,$srchstring,$current,'end');
-            }#else  
+            $current=$queryout->search(-nocase,"$srchstring",$current,'end');
+            }#else
       last if (!$current);
       $queryout->tag('add','search',$current,"$current + $stringlength char");
       $queryout->tag('configure','search',
@@ -2484,12 +2594,15 @@ sub find_all {
       $searchcount++;       
       $current=$queryout->index("$current + 1 char");
       }#while true
-   $SW->configure(-title=>"$searchcount Matches");
-   $searchcount=0;
-   $current='0.0';
+      #no matches were found - set the titlebar
+   if ($searchcount==0) {
+      $SW->configure(-title=>"No Matches");
+      }else{
+         $SW->configure(-title=>"$searchcount Matches");
+         }
 }#sub find all
 
-#find and highlight one instance of a string at a time
+#find and highlight one instance of the search string at a time
 sub find_one {
    return if ($srchstring eq "");
    $ssentry->invoke;
@@ -2500,13 +2613,13 @@ sub find_one {
       $tempcurrent='0.0';
       $srchstringold=$srchstring;
       while (1) {
-         if ($caseflag eq "case") {  
-            $tempcurrent=$queryout->search(-exact,$srchstring,$tempcurrent,'end');
+         if ($caseflag eq "case") {
+            $tempcurrent=$queryout->search(-exact,"$srchstring",$tempcurrent,'end');
             }else{
-               $tempcurrent=$queryout->search(-nocase,$srchstring,$tempcurrent,'end');
-               }#else  
+               $tempcurrent=$queryout->search(-nocase,"$srchstring",$tempcurrent,'end');
+               }#else
          last if (!$tempcurrent);
-         $allcount++;       
+         $allcount++;
          $tempcurrent=$queryout->index("$tempcurrent + 1 char");
          $searchcount=0;
          $current='0.0';
@@ -2514,13 +2627,13 @@ sub find_one {
      $newsearch=0; 
     }#if srchstring ne srstringold
    #set the titlebar of the search dialog to indicate the matches
-   $SW->configure(-title=>"$allcount Matches");  
+   $SW->configure(-title=>"$allcount Matches");
    $stringlength=length($srchstring);
    if (!$current) {
       $current='0.0';
       $searchcount=0;
-      } # if current  
-   if ($caseflag eq "case") {  
+      } # if current
+   if ($caseflag eq "case") {
       $current=$queryout->search(-exact,$srchstring,"$current +1 char");
       }else{
          $current=$queryout->search(-nocase,$srchstring,"$current +1 char");
@@ -2529,18 +2642,60 @@ sub find_one {
    if ($current eq "") {
       $SW->configure(-title=>"No Matches");
       return;
-      }      
+      }
    $current=$queryout->index($current);
    $queryout->tag('add','search',$current,"$current + $stringlength char");
    $queryout->tag('configure','search',
       -background=>'chartreuse',
       -foreground=>'black',
-      );         
+      );
    $queryout->see($current);
    #see where the display has horizontally scrolled and move the header text to match 
    ($tscrollx,$rest)=$queryout->xview;
    $queryheader->xview(moveto=>$tscrollx);
 } #sub find one
+
+sub alarm_handler {
+   print "Timer expired.. Cleaning up.";
+   $alarmstring=" **  Incomplete Data - Timer Expired  **";
+   $sth->finish;
+   #cancel is not working yet...  Michael Peppler to fix
+   #$sth && $sth->cancel;
+   #if no data is being returned from the server, currently there is no way
+   #to force the process down.  (Michael Peppler to fix)
+   if (!$dbdata) {
+      print "No data has been returned, forcing a stop of the command";
+      exit;
+      }
+}#sub
+
+#error handler taken from subutil.pl in the sybperl distribution.  Needed to trap
+#the error strings returned for non DB type
+sub err_handler {
+   my ($err, $severity, $state, $line, $server, $proc, $msg)= @_;
+   #print "ERROR Handler ($err, $severity, $state, $line, $server, $proc, $msg)";
+   # Check the error code to see if we should report this.   
+   if ($severity >=10 && $err>0) {
+      $msg=wrap(" "," ","$msg");
+      $skipsort=1;
+      $sortoverride=1;
+      $queryout->insert('end',"Error:$err\nProcedure:$proc\nLine:$line\nState:$state\nSeverity:$severity\n\n$msg\n");
+      #I have to push the error text onto the retrows array for errors 
+      push(@dbretrows,"Error:$err\nProcedure:$proc\nLine:$line\nState:$state\nSeverity:$severity\n\n$msg\n");
+      alarm();
+      &set_command_state;
+      &setunbusy;
+      #return(1);
+      }
+      
+   #handle data that is returned from a print statement like form the sp_helpcode proc   
+   if ($err==0 && $msg !~/^ *$/) {
+      return if ($msg =~/^Message empty/);
+      push(@dbretrows,"$msg");
+      $skipsort=1;
+      return 0;
+      }
+}#sub error_handler
 
 #return a positive status 
 1;
