@@ -42,6 +42,9 @@ DESCRIPTION
 
         The date/time of command execution is captured in the title bar.
 
+        A checkpoint filename can be specified as an argument.   This allows the user to maintain
+        separate or pre-defined menu histories for all menus in dbgui.
+        
         More probably.... :-)
 
 PREREQUISITES

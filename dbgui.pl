@@ -54,10 +54,14 @@
 ##
 ## Wed Jun 16 17:54:50 CDT 1999  Made some minor - mostly cosmetic changes.  Fixed a bug where
 ##     the sql command was being printed twice in a save file.  
+##
+## Tue Jun 22 17:14:03 CDT 1999  Added the checkpoint file as an argument to allow pre-defined
+##     menu histories to be defined and kept in separate database files.
+##
 ################################################################################
 
 #the current version
-local $VERSION="1.6.5";
+local $VERSION="1.6.6";
 
 =head1 NAME
 
@@ -104,6 +108,8 @@ Solicit and quickly popup a list of the system datatypes.
 Colored busy indicator (red/green) to indicate if the DBGUI is waiting on results from the DB server.
 
 The date/time of command execution is captured in the title bar.
+
+The checkpoint file can be specified as an argument. Allowing pre-defined menu histories to be defined
 
 More probably....  :-)
 
@@ -223,8 +229,21 @@ queryhist3temp
 searchhisttemp
 );
 
-#the file sourced upon startup to load parameter histories
-local $checkpointfile="$ENV{HOME}/.dbgui";
+#check the arguments.  If one is given it has to be checkpoint file to load.  If none
+#is given, use the home directory
+$checkf="$ARGV[0]";
+if (!$checkf) {
+   #the normal file sourced upon startup to load parameter histories
+   $checkpointfile="$ENV{HOME}/.dbgui";
+   }else{
+      #if the local file doesnt exist set the home path to it
+      if (! -f $checkf) {
+         $checkpointfile="$ENV{HOME}/$checkf";
+         #the full path must have been specified
+         }else{
+            $checkpointfile=$checkf;
+            }#else #2
+      }#else #1
 
 #if the checkpoint file exists, execute it to startup in the same state as when it was shutdown
 if (-e $checkpointfile) {
@@ -278,7 +297,7 @@ if (!$maxrowcount) {
 #                                       Main Window     
 #------------------------------------------------------------------------------------------
 #
-$LW = new  MainWindow (-title=>"DBGUI $VERSION");
+$LW = new  MainWindow (-title=>"DBGUI $VERSION  [$checkpointfile]");
 #set some inherited default colors
 $LW->optionAdd("*background","$background"); 
 $LW->optionAdd("*foreground","$txtforeground"); 
@@ -1748,7 +1767,7 @@ sub check_cmd {
    $confirm=&operconfirm;
    if ($confirm eq "Ok") {
       $date=`date`;
-      $LW->configure(-title=>"DBGUI $VERSION   $date"); 
+      $LW->configure(-title=>"DBGUI $VERSION  [$checkpointfile]  $date"); 
       #save off a wrapped version of the sqlstring for the ascii save files
       $savsqlstring=wrap("    ","    ","$sqlstring");
       #the header has to be nulled out for querys and db commands
@@ -2255,7 +2274,6 @@ sub save_exit {
                    #the snapshot variable is empty - write out null definitions for each variable
                    $snapshotstring="$_\=\"";   
                    foreach (@variablelist) {
-                      print "variable ($_)";
                       next if (/^snapshot/);
                       $snapshotstring.="\$$_=\'\'\;"
                       }
