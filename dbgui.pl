@@ -45,10 +45,13 @@
 ## Tue May 18 13:55:06 CDT 1999 Fixed problem where I wasnt displaying the errors returned
 ##     if an invalid command (for example) was executed on the server..  (no result sets returned)
 ##
+## Tue May 25 17:47:55 CDT 1999  Moved the row/column counters to the top.  Makes for a smaller
+##     and more efficient display.
+## 
 ################################################################################
 
 #the current version
-local $VERSION="1.6.2";
+local $VERSION="1.6.3";
 
 =head1 NAME
 
@@ -404,6 +407,7 @@ $labelent7=$labelframe->Frame(
       -side=>'left',
       );
 
+
 $busymarker=$labelframe->Canvas(
    -relief=>'raised',
    -width=>16,
@@ -414,6 +418,17 @@ $busymarker=$labelframe->Canvas(
       -padx=>2,
       -side=>'right',
       );    
+      
+$labelent8=$labelframe->Frame(
+   -relief=>'raised',
+   -background=>$labelbackground,
+   )->pack(
+      -fill=>'y',
+      -expand=>0,
+      -pady=>0,
+      -padx=>0,
+      -side=>'left',
+      );
         
 $listframe1=$listframeall->Frame(
    -borderwidth=>'0',
@@ -745,6 +760,77 @@ $methodmenu->command(
    -background=>$background,
    );
 
+$rowdata=$labelent8->Frame(
+   -relief=>'flat',
+   -background=>$labelbackground,
+   )->pack(
+      -side=>'top',
+      -padx=>0,
+      -pady=>0,
+      -expand=>1,
+      -fill=>'both',
+      );
+
+$coldata=$labelent8->Frame(
+   -relief=>'flat',
+   -background=>$labelbackground,
+   )->pack(
+      -side=>'bottom',
+      -padx=>0,
+      -pady=>0,
+      -expand=>1,
+      -fill=>'both',
+      );
+
+$rownumlabel=$rowdata->Label(
+   -text=>'Rows:',
+   -foreground=>$rowcolcolor,
+   -justify=>'right'
+   )->pack(
+      -side=>'left',
+      -padx=>0,
+      -pady=>0,
+      );
+
+$rowdata->Label(
+   -textvariable=>\$dbrowcount,
+   -width=>6,
+   -background=>$txtbackground,
+   -foreground=>$rowcolcolor,
+   -relief=>'sunken',
+   )->pack(
+      -side=>'right',
+      -padx=>0,
+      -pady=>0,
+      -fill=>'y',
+      );
+
+$colnumlabel=$coldata->Label(
+   -text=>'Cols:',
+   -foreground=>$rowcolcolor,
+   -justify=>'right'
+   )->pack(
+      -side=>'left',
+      -padx=>0,
+      -pady=>0,
+      );
+
+$coldata->Label(
+   -textvariable=>\$dbcolcount,
+   -width=>6,
+   -background=>$txtbackground,
+   -foreground=>$rowcolcolor,
+   -relief=>'sunken',
+   )->pack(
+      -side=>'right',
+      -padx=>0,
+      -pady=>0,
+      -fill=>'y',
+      );
+    
+
+
+
 #create the circle button to show the active status
 #$canvas->createOval(x1, y1, x2, y2, ?option, value, option, value, ...?)
 $busymarker->createOval(3,15,15,3, 
@@ -1035,65 +1121,6 @@ $scrollx->configure(-command=>\&my_xscroll);
 #------------------------------------------------------------------------------------------
 #                              bottom row of buttons and labels
 
-#padding for spacing
-$rowcoldata=$buttonframe->Frame(
-   -relief=>'sunken',
-   )->pack(
-      -side=>'left',
-      -padx=>0,
-      -pady=>0,
-      -expand=>0,
-      -fill=>'y',
-      );
-
-$rownumlabel=$rowcoldata->Label(
-   -text=>'R:',
-   -background=>$background,
-   -foreground=>$rowcolcolor,
-   -justify=>'right'
-   )->pack(
-      -side=>'left',
-      -padx=>0,
-      -pady=>5,
-      );
-
-$rowcoldata->Label(
-   -textvariable=>\$dbrowcount,
-   -width=>5,
-   -background=>$txtbackground,
-   -foreground=>$rowcolcolor,
-   -relief=>'sunken',
-   )->pack(
-      -side=>'left',
-      -padx=>0,
-      -pady=>5,
-      -fill=>'y',
-      );
-
-$colnumlabel=$rowcoldata->Label(
-   -text=>' C:',
-   -background=>$background,
-   -foreground=>$rowcolcolor,
-   -justify=>'right'
-   )->pack(
-      -side=>'left',
-      -padx=>0,
-      -pady=>5,
-      );
-
-$rowcoldata->Label(
-   -textvariable=>\$dbcolcount,
-   -width=>5,
-   -background=>$txtbackground,
-   -foreground=>$rowcolcolor,
-   -relief=>'sunken',
-   )->pack(
-      -side=>'left',
-      -padx=>2,
-      -pady=>5,
-      -fill=>'y',
-      );
-    
 $sortframe=$buttonframe->Frame(
    -relief=>'sunken',
    )->pack(
@@ -1107,7 +1134,7 @@ $sortframe=$buttonframe->Frame(
 $sortlabel=$sortframe->Label(
    -text=>'Sort:',
    -relief=>'flat',
-   -width=>5,
+   -width=>6,
    -background=>$background,
    )->pack(
       -side=>'left',
@@ -2269,6 +2296,8 @@ sub act_deactivate {
 #the error strings returned for non DB type
 sub error_handler {
    my ($db, $severity, $error, $os_error, $error_msg, $os_error_msg)= @_;
+   #print "($db, $severity, $error, $os_error, $error_msg, $os_error_msg)";
+   
    # Check the error code to see if we should report this.   
    if ($error != SYBESMSG) {
       $error_msg=wrap(" "," ","$error_msg");
@@ -2283,12 +2312,15 @@ sub error_handler {
 #the message strings returned form the DB server  "lib/linutil.pl"
 sub message_handler {
    my ($db, $message, $state, $severity, $dbtext, $server, $procedure, $line)= @_;
+   #print "(db, message, state, severity, dbtext, server, procedure, line)";
+   #print "($db, $message, $state, $severity, $dbtext, $server, $procedure, $line)";
    # Don't display 'informational' messages
    if ($severity > 10) {
       #wrap the error text
       $dbtext=wrap(" "," ","$dbtext");
       #if there are no result rows returned, sortby wont do anything, therefore we push the
       #error text into the display pane.
+      push(@dbretrows,"Message:$message\nSeverity:$severity\nProcedure:$procedure\nLine:$line\nState:$state\n\n$dbtext");
       $queryout->insert('end',"Message:$message\nProcedure:$procedure\nLine:$line\nState:$state\nSeverity:$severity\n\n$dbtext");
       $skipsort=1;
       INT_CANCEL;
