@@ -63,13 +63,13 @@
 ##     row/column counters towards the bottom (again)...   Localized many variables.  Enabled
 ##     multiple clone windows to be displayed.  Changed the widths of the columns to be data
 ##     related.  No more need for special column handling, the display is always as compact as
-##     possible.
+##     possible.  Changed to sprintf's in an attempt to speed up the column padding
 ##
 ##
 ################################################################################
 
 #the current version
-my $VERSION="2.1";
+my $VERSION="2.1.1";
 
 =head1 NAME
 
@@ -255,8 +255,7 @@ my %dbdatatypes=qw(
 #the path to the isql binary
 my $isqlbinary="/net/pvcsserv01/sft/sybase/bin/isql";
 #the path to the sqsh binary
-my $sqshbinary="/net/pvcsserv01/usr/tools/sqsh";
-
+my $sqshbinary="/net/pvcsserv01/sft/tools/sqsh";
 
 #the sql command used to extract the defined datatypes from the database
 my $dbtypescmd="select type,length,name from systypes";
@@ -1538,7 +1537,7 @@ sub clone_data {
       -textvariable=>\$clonestat,
       -borderwidth=>1,
       -background=>$background,
-      -foreground=>$rowcolcolor,
+      -foreground=>$txtforeground,
       -font=>$winfont,
       -relief=>'flat'
       )->pack(
@@ -1716,6 +1715,7 @@ sub check_cmd {
       #&checkpoint;
       #if the menuitem on the display is set to Isql or sqsh, call the isql binary for the
       #dbcommand and skip all of the other stuff
+      &checkpoint;
       if ($method eq "Isql"||$method eq "Sqsh") {
          &run_isql_cmd;
          &setunbusy;
@@ -1856,18 +1856,13 @@ sub run_query {
             #if the element is flagged to be a resultset delimiter, create a divider line instead
             #of padding with spaces
             if ($operstring eq "!!rsdim") {
-               $pad="-";
                $operstring="";
-               }else {
-                  $pad=" ";
+               for($y=0; $y<$hlength{$i}; ++$y) {
+                  $operstring.="-";
                   }
-            my $checklength=length($operstring);
-            #the .= method is a tiny bit slower
-            until ($checklength>=$hlength{$i}) {
-               $operstring.="$pad";
-               $checklength++;
-               } 
-            $finalout="$finalout$operstring$stringpad | ";                     
+               }#if ($operstring eq "!!rsdim") 
+            $operstring=sprintf("%-$hlength{$i}\s",$operstring);                 
+            $finalout="$finalout$operstring | ";                     
             }#for($i=0; $i<scalar(@elements); ++$i)
          push (@dbretrows, "$finalout");
          }#for($z=0; $z<scalar(@tempdbretrows;
@@ -1981,7 +1976,9 @@ sub set_command_state {
    $sortbyentry->configure(-width=>24,-justify=>'left',-state=>'disabled');
    }#sub
 
-#the sort routine can be called standalone, so it is splitout of the run_query routine
+#the sort routine can be called standalone, so it is splitout of the run_query routine,
+#it performs more than just the sort.  It is also responsible for populating the text
+#widget $queryout and $queryheader
 sub sortby {
    #execute the sort ONLY if 1 result set has been returned and the skipsort flag is 0
    if ($resultcount==1 && $skipsort==0) {
@@ -2029,10 +2026,9 @@ sub sortby {
          until ($dbretrows[0] !~/^ *$/||$#dbretrows==-1) {
             splice(@dbretrows,0,1);
             }
+         $queryout->delete('0.0','end');
          }#if sortby
       }#if resultcount ==1
-   #clear out the queryout text widget and replace with the sorted rows
-   $queryout->delete('0.0','end');
    $dbrowcount=0;
    #post the results regardless of whether or not a sort is being executed
    for ($t=0; $t<scalar(@dbretrows); $t++) {
@@ -2297,14 +2293,16 @@ sub act_deactivate {
 #the error strings returned for non DB type
 sub err_handler {
    my ($err, $severity, $state, $line, $server, $proc, $msg)= @_;
+   #print "($err, $severity, $state, $line, $server, $proc, $msg)";
    # Check the error code to see if we should report this.   
-   if ($severity >10) {
+   if ($severity >=10 && $err>0) {
       $msg=wrap(" "," ","$msg");
       $queryout->insert('end',"Error:$err\nProcedure:$proc\nLine:$line\nState:$state\nSeverity:$severity\n\n$msg");
       $skipsort=1;
       &set_command_state;
       #return 1;
       }
+   #handle data that is returned from a print statement like form the sp_helpcode proc   
    if ($err==0 && $msg !~/^ *$/) {
       return if ($msg =~/^Message empty/);
       push(@dbretrows,"$msg");
