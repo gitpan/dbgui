@@ -45,23 +45,33 @@ DESCRIPTION
         A checkpoint filename can be specified as an argument.   This allows the user to maintain
         separate or pre-defined menu histories for all menus in dbgui.
         
+        The loaded checkpoint file is captured in the title bar.
+        
         More probably.... :-)
 
 PREREQUISITES
     This script requires the following Perl Modules:
 
-        `Tk Toolkit'
+        'Tk Toolkit'
 
-        `Sybperl'
+        'DBI'
         
-        `Sort::Fields'
+        'DBD' (for your particular type of database server  sybase,oracle etc..) 
+        
+        'Sort::Fields'
 
-        `Tk::HistEntry'
+        'Tk::HistEntry'
 
-        `Tk::PrintDialog'
+        'Tk::PrintDialog'
 
     CPAN/Administrative Fun/Educational
 
+Startup:
+   dbgui.pl <ret> (to load the default ~/.dbgui checkpoint file)
+   dbgui.pl [checkpoint file] (to load  a checkpoint file in the local directory or the home
+      directory.  (in that order).  You can run dbgui multiple instances of dbgui, each with
+      its own checkpoint file (if you wish).   This allows the user to have separate command
+      histories for different servers.
 
 The Buttons/HistEntrys:
 (From left to right, top to bottom)
@@ -131,9 +141,10 @@ The sql display pane - This is the sql output display pane.  Once a sql command 
    Note - if more than one result set is returned by your sql command, no header will be
    displayed, and the multiple result sets will be displayed in the output pane.
    
-R: label - This displays the rowcount of the executed command.
 
-C: label - This displays the column count of the executed command.
+Rows: label - This displays the rowcount of the executed command.
+
+Cols: label - This displays the column count of the executed command.
 
 Sort: menubutton - This lets the user select a column to sort by.
 
@@ -149,10 +160,6 @@ Snap button - Creates command "snapshots" for the current command.  Used by the 
 Clone button - Generates a second window containing the current sql output.  It allows the 
    user to spawn a second display of the data in order to continue executing sql commands,
    and still have the cloned data available for comparisons etc..
-
-Dtypes button - Retrieves the datatypes from the current database and displays a popup of
-   all of the returned datatype values.  The data types for each column are displayed in
-   square brackets in each column header (when the column header pane is visible).
    
 Save button - Saves the current sql data and parameters (except for the db password) to a 
    text file.
@@ -188,10 +195,10 @@ I hope you like DBGUI.  I use it every day... It has made my life a lot easier..
 DBGUI can be fetched from your local CPAN site - 
    $CPAN/authors/id/M/MS/MSCROGGIN 
 or my home page - 
-   http://www.flash.net/~monty4/
+   http://home.swbell.net/mscroggi/
 
 I can be contacted via my webpage or at 
-   Monty4@flash.net.
+   mscroggi@swbell.net
 
 Ciao
 
