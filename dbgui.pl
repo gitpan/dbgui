@@ -70,7 +70,7 @@
 ################################################################################
 
 #the current version
-my $VERSION="2.1.6";
+my $VERSION="2.1.7";
 
 =head1 NAME
 
@@ -1306,7 +1306,7 @@ $rowcolframe->Label(
    -background=>$background,
    -relief=>'flat',
    )->pack(
-      -side=>'left',
+      -side=>'top',
       -fill=>'x',
       -padx=>0,
       -pady=>0,
@@ -1324,11 +1324,30 @@ my $sortframe=$buttonframe->Frame(
       );
 
 #bindings for this label are below the sortbyentry declaration
-my $sortlabel=$sortframe->Label(
-   -text=>'Sort:',
-   -relief=>'flat',
-   -width=>6,
-   -background=>$background,
+my $sumbutton=$sortframe->Button(
+   -text=>'Sum',
+   -relief=>'raised',
+   -background=>$buttonbackground,
+   -width=>3,
+   -command=>\&total_col
+   )->pack(
+      -side=>'left',
+      -padx=>0,
+      -pady=>$ypad,
+      -fill=>'y',
+      );
+      
+#bindings for this label are below the sortbyentry declaration
+my $sortbutton=$sortframe->Button(
+   -text=>'Sort',
+   -relief=>'raised',
+   -width=>3,
+   -background=>$buttonbackground,
+   -command=>sub {
+      ($tscrolly,$rest)=$queryout->yview;
+      ($tscrollx,$rest)=$queryout->xview;
+      &sortby($tscrollx,$tscrolly);
+      },
    )->pack(
       -side=>'left',
       -padx=>0,
@@ -1339,7 +1358,6 @@ my $sortlabel=$sortframe->Label(
 my $sortbyentry=$sortframe->Optionmenu(
    -background=>$buttonbackground,
    -width=>24,
-   -command=>\&sortby,
    )->pack(
       -side=>'left',
       -expand=>1,
@@ -1350,15 +1368,14 @@ my $sortbyentry=$sortframe->Optionmenu(
 
 #use button three disable sorting for the next command only. (hidden feature)
 #the sort settings are restored after the initial execution
-$sortlabel->bind('<Button-1>'=>sub{
+$sortbutton->bind('<Button-1>'=>sub{
    $sortoverride=0;
-   $sortlabel->configure(-foreground=>$txtforeground);
+   $sortbutton->configure(-foreground=>$txtforeground);
    $sortbyentry->configure(-state=>'normal');
    });
-$sortlabel->bind('<Button-3>'=>sub{
+$sortbutton->bind('<Button-3>'=>sub{
    $sortoverride=1;
-   $sortlabel->configure(-foreground=>'grey65');
-   $sortbyentry->configure(-width=>24,-justify=>'left',-state=>'disabled');
+   $sortbutton->configure(-foreground=>'grey65');
    });
 
 my $revsortbutton=$sortframe->Checkbutton(
@@ -1370,7 +1387,7 @@ my $revsortbutton=$sortframe->Checkbutton(
    -width=>4,
    -offvalue=>0,
    -onvalue=>1,
-   -command=>\&sortby,
+   -command=>sub {&sortby($tscrollx,$tscrolly)},
    )->pack(
       -side=>'left',
       -expand=>0,
@@ -1388,7 +1405,7 @@ my $numsortbutton=$sortframe->Checkbutton(
    -width=>4,
    -offvalue=>0,
    -onvalue=>1,
-   -command=>\&sortby,
+   -command=>sub {&sortby($tscrollx,$tscrolly)},
    )->pack(
       -side=>'left',
       -expand=>0,
@@ -1397,20 +1414,6 @@ my $numsortbutton=$sortframe->Checkbutton(
       -fill=>'y',
       );
 
-#bindings for this label are below the sortbyentry declaration
-my $sumbutton=$sortframe->Button(
-   -text=>'Sum',
-   -relief=>'raised',
-   -background=>$buttonbackground,
-   -width=>4,
-   -command=>\&total_col
-   )->pack(
-      -side=>'left',
-      -padx=>0,
-      -pady=>$ypad,
-      -fill=>'y',
-      );
-      
 #frame for spacing
 $sortframe->Frame(
    -borderwidth=>'0',
@@ -1585,7 +1588,7 @@ sub clone_data {
    $CW->destroy if Exists($CW);
    $CW=new MainWindow(-title=>"Cloned Data - $clonedate");
    #set a minimum size so the window cant be resized down to mess up the cancel button
-   $CW->minsize(854,244);
+   $CW->minsize(884,244);
    #The top frame for the text
    my $cloneframe1=$CW->Frame(
       -borderwidth=>'0',
@@ -1681,6 +1684,7 @@ sub clone_data {
       -relief=>'sunken'
       )->pack(
          -side=>'left',
+         -expand=>1,
          -padx=>3,
          -pady=>3,
          -fill=>'both',
@@ -1741,17 +1745,17 @@ sub clone_data {
       chomp $tdata[0];
       $cloneheader->insert('end',@tdata[0]);
       $cloneheader->insert('end',@tdata[1]);
-      $cloneheader->tag('add','clonedbtype',"2.0","2.0 + 1 line");
-      $cloneheader->tag('configure','clonedbtype',
-         -foreground=>$datatypeforeground,
-         );
       }else{
          $cloneheader->packForget;
          };
    my @tdata=$queryout->get('0.0','end');
    $clonewin->insert('end',@tdata);
    #generate the status string for the clone window
-   $clonestat=" S:$dbserver  R:$dbrowcount  C:$dbcolcount  DB:$dbuse  MR:$maxrowcount  Meth:$method  Sort:$sortby ";
+   if ($method =~/DBI\/DBD|Sybase/ && $resultcount==1) {
+      $clonestat="S:$dbserver  R:$dbrowcount  C:$dbcolcount  DB:$dbuse  MR:$maxrowcount  Meth:$method  Sort:$sortby ";
+      }else{
+         $clonestat="Server:$dbserver  Database:$dbuse  MaxRows:$maxrowcount  Meth:$method";         
+         }
    $savsqlstring=~s/^ +//;
    $savsqlstring=~s///;
    $cldbcmd->command(
@@ -1760,10 +1764,10 @@ sub clone_data {
       -activeforeground=>$txtforeground,
       -activebackground=>$txtbackground,
       );
-   #scroll the window to display the same lines as the original window
-   $cloneheader->xview(moveto=>$clscrollx);
-   $clonewin->xview(moveto=>$clscrollx);
-   $clonewin->yview(moveto=>$clscrolly);
+      #scroll the window to display the same lines as the original window
+      $cloneheader->xview(moveto=>$clscrollx);
+      $clonewin->xview(moveto=>$clscrollx);
+      $clonewin->yview(moveto=>$clscrolly);
 }#sub clone
 
 #tie two text widgets (header and data) to scroll horizontally together
@@ -1786,7 +1790,7 @@ sub operconfirm {
          -default=>'Cancel',
          -bg=>$background,
          -title=>'Action Confirm',
-         -text=>"You are about to perform a potentially dangerous command on\n$dbserver!\n\nPlease confirm the action before\nit is executed..",
+         -text=>"You are about to perform a potentially dangerous command on\n\n$dbserver!\n\nPlease confirm the action before\nit is executed..",
          -font=>'8x13bold',
          );
       return $ask;
@@ -2055,7 +2059,7 @@ sub run_query {
       $qhstring2="$dbretrows[1]";
       splice(@dbretrows,0,3);
       }#if ($resultcount==1 && $skipsort==0)
-   &sortby;
+   &sortby($tscrollx,$tscrolly);
    }#sub run_query
 
 #connect with server and execute a DB command using the isql or sqsh binary
@@ -2079,7 +2083,11 @@ sub run_isql_cmd {
       }
    @dbretrows=`$sqlbinary -U$dbuser -P$dbpass -S$dbserver -w999 <<EOD\n$usecmd\n$sqlstring\ngo\nEOD`;
    $queryout->insert('end',"\ @dbretrows");
-   }#sub
+   if ($tscrollx>-1 && $tscrolly>-1) {
+      $queryout->xview(moveto=>$tscrollx);
+      $queryout->yview(moveto=>$tscrolly);
+      }
+   }#sub run_isql_cmd
 
 #set the busy LED to red
 sub setbusy {
@@ -2103,10 +2111,9 @@ sub set_query_state {
    $revsortbutton->configure(-state=>'normal',-selectcolor=>'red4');
    $numsortbutton->configure(-state=>'normal',-selectcolor=>'red4');
    $sumbutton->configure(-state=>'normal');
+   #the tag for the data type row 
    $queryheader->tag('add','dbtype',"2.0","2.0 + 1 line");
-   $queryheader->tag('configure','dbtype',
-      -foreground=>$datatypeforeground,
-      );
+   $queryheader->tag('configure','dbtype',-foreground=>$datatypeforeground);
    #manually set the history for sortby and move the display back to where it was previously, also
    #make sure the width is set, otherwise, the menubutton will resize and mess up the execute button
    my @empty="";
@@ -2115,11 +2122,10 @@ sub set_query_state {
    $sortbyentry->configure(-options=>\@empty);
    $sortbyentry->configure(-options=>\@sortbyhist,-width=>24,-justify=>'left');
    if ($sortoverride==0) {
-      $sortlabel->configure(-foreground=>$txtforeground);
+      $sortbutton->configure(-foreground=>$txtforeground);
       $sortbyentry->configure(-state=>'normal');
       }else{
-         $sortlabel->configure(-foreground=>'grey65');
-         $sortbyentry->configure(-width=>24,-justify=>'left',-state=>'disabled');
+         $sortbutton->configure(-foreground=>'grey65');
          }
    #set the sort override off, the override is only good for one command execution
    $sortoverride=0;
@@ -2130,7 +2136,7 @@ sub set_command_state {
    $queryheader->packForget;
    $queryout->pack(@datainfo);
    $sortby=" ";
-   $sortlabel->configure(-foreground=>'grey65');
+   $sortbutton->configure(-foreground=>'grey65');
    $revsortbutton->configure(-state=>'disabled',-selectcolor=>$buttonbackground);
    $numsortbutton->configure(-state=>'disabled',-selectcolor=>$buttonbackground);
    $sumbutton->configure(-state=>'disabled');
@@ -2148,16 +2154,12 @@ sub set_command_state {
 #it performs more than just the sort.  It is also responsible for populating the text
 #widget $queryout and $queryheader
 sub sortby {
+   ($tscrollx,$tscrolly)=@_;
+   if (!$tscrollx) {$tscrollx=0};
+   if (!$tscrolly) {$tscrolly=0};
    #execute the sort ONLY if 1 result set has been returned and the skipsort flag is 0
    if ($resultcount==1 && $skipsort==0) {
       &setbusy;
-      ($sortscrolly,$rest)=$queryout->yview;
-      if ($tscrolly ne $sortscrolly&&$sortscrolly>0) {
-         $tscrolly=$sortscrolly;
-         }
-      if ($sortby=~/^ *$/) {
-         $sortby=$sortbyhist[0];
-         }
       if (grep(/^\Q$sortby\E$/,@sortbyhist)) {
          # we have to figure what element of the sortbyhist array the sort parameter is..
          $sortindex=0;
@@ -2168,7 +2170,7 @@ sub sortby {
             }#foreach @sortbyhist
          }else{
             $sortindex=0;
-            $sortby=();
+            $sortby=$sortbyhist[0];
             }#else if grep sortby..
       #if the numeric flag is set, sort differently
       if ($numsort) {
@@ -2182,7 +2184,7 @@ sub sortby {
       #from double sorting.  Once when sortby is called and again when the sortbyentry
       #optionmenu is configured with the sort items
       if ($sortby&&$sortoverride==0) {
-         #execute the sort
+         #Actually execute the sort
          @dbretrows=fieldsort '\|',[$sortindex],@dbretrows;
          }#if sortby
       #populate the header just before the data fields
@@ -2197,11 +2199,17 @@ sub sortby {
             $x--;
             }#if
          }#for
-      }#if resultcount ==1;
+      }else {
+         #take off the first row if null and resultcount is >1
+         if ($dbretrows[0]=~/^ *$/) {
+            splice(@dbretrows,0,1);
+            }#if
+         }#else if resultcount ==1;
+   $dbretrows[0]=~s/ *\n//;
    #post the results regardless of whether or not a sort is being executed
    $queryout->delete('0.0','end');
    $queryout->insert('end',"@dbretrows\n");
-   #check the header to see if it contains any real data.  This is for thos sp_commands that only
+   #check the header to see if it contains any real data.  This is for those sp_commands that only
    #return one resultset, but dont have a  structured table style output, therefore we need to treat
    #the data like a command not a table.   ex - sp_lock
    my $testhdata=$queryheader->get('0.0','end');
@@ -2216,9 +2224,27 @@ sub sortby {
       }else{
          &set_command_state
          }
-   $queryheader->xview(moveto=>$tscrollx);
-   $queryout->xview(moveto=>$tscrollx);
-   $queryout->yview(moveto=>$tscrolly);
+   if ($tscrollx>-1 && $tscrolly>-1) {
+      $queryheader->xview(moveto=>$tscrollx);
+      $queryout->xview(moveto=>$tscrollx);
+      $queryout->yview(moveto=>$tscrolly);
+      }
+   #highlight the headers for each result set if more than one is returned
+   if ($resultcount>1 && $method eq "DBI/DBD") {
+      $srchstring='\-';
+      #delete any old tags so new ones will show
+      $queryout->tag('remove','header', qw/0.0 end/);
+      $current='0.0';
+      while (1) {
+         $current=$queryout->search(-regexp,'^------+ \|',$current,'end');
+         last if (!$current);
+         $queryout->tagAdd('header',"$current -2 line","$current +1 line");
+         $queryout->tag('configure','header',
+            -foreground=>$headerforeground,
+            );
+         $current=$queryout->index("$current + 1 line");
+         }#while true
+      }
    &setunbusy;
    }#sub sortby
 
@@ -2247,7 +2273,7 @@ sub total_col {
          }
       $sum+=$t;
       }
-   $alarmstring="    Sort column sum: $sum";
+   $alarmstring="    $sortby Total: $sum";
    }
    
 #write out the returned query information to an ascii file

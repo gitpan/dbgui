@@ -14,7 +14,7 @@ DESCRIPTION
 
         Sort (normal, numerical and reverse) on any column of the SQL results.
 
-        Sum up the numeric values in the sorted column
+        Sum up the numeric values in any data column
         
         Print the SQL results to a printer.
 
@@ -48,6 +48,8 @@ DESCRIPTION
         separate or pre-defined menu histories for all menus in dbgui.
         
         The loaded checkpoint file is captured in the title bar.
+        
+        Color coded headers for multiple resultset data.
         
         More probably.... :-)
 
@@ -171,17 +173,20 @@ Rows: label - This displays the rowcount of the executed command.
 
 Cols: label - This displays the column count of the executed command.
 
-Sort: menubutton - This lets the user select a column to sort by.  A "hidden" feature of the sort
-   label is if mouse button three is clicked, sorting will be disabled for the next command
-   executed. Once a second command executed, the sort status is restored to normal. 
+Sum button - Attempts to sum up all of the values in the sorted column and display the results.
+   If non-numeric data is encountered "N/A" is displayed for the total.
+
+Sort button - This executes the sort function on the selected column.  A "hidden" feature of 
+   the sort label is if mouse button three is clicked, sorting will be disabled for the next 
+   command executed. Once a second command executed, the sort status is restored to normal. 
    Mouse button one restores the default sort status.
+
+Sortby Menubutton - This selects the column to use for the sort function.
 
 Rev radiobutton - Sets the sort to be a reverse sort.
 
 Num radiobutton - Sets the sort to be a numeric sort.
 
-Sum button - Attempts to sum up all of the values in the sorted column and display the results.
-   If non-numeric data is encountered "N/A" is displayed for the total.
 
 Exec button - Executes the current sql command.
 
