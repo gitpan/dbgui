@@ -48,10 +48,13 @@
 ## Tue May 25 17:47:55 CDT 1999  Moved the row/column counters to the top.  Makes for a smaller
 ##     and more efficient display.
 ## 
+## Wed Jun 9 12:11:05 CDT 1999  Added the small change to display pound symbols instead of the
+##     actual text for the password entry.  Changed the busy indicator to a simple colored frame
+##     for simplicity.
 ################################################################################
 
 #the current version
-local $VERSION="1.6.3";
+local $VERSION="1.6.4";
 
 =head1 NAME
 
@@ -164,7 +167,7 @@ local $buttonwidth=4;
 local $ypad=4;
 local $busy="Ready";
 local $busycolor="red2",
-local $unbusycolor="green3",
+local $unbusycolor='#009f00',
 local $columns=40;
 local $savedialogcolor="#caC2BBBBA7A7";
 local $histlimit=60;
@@ -406,15 +409,15 @@ $labelent7=$labelframe->Frame(
       -padx=>0,
       -side=>'left',
       );
-
-
-$busymarker=$labelframe->Canvas(
+      
+$busymarker=$labelframe->Frame(
    -relief=>'raised',
    -width=>16,
    -height=>16,
+   -background=>$unbusycolor,
    )->pack(
       -expand=>0,    
-      -pady=>0,
+      -pady=>2,
       -padx=>2,
       -side=>'right',
       );    
@@ -472,7 +475,7 @@ $dbserventry=$servhistframe->HistEntry(
    -width=>$tophistentrywidth,
    -limit=>$histlimit,
    -dup=>0,
-   -match => 1,  
+   -match=>0,  
    -command=>sub{@dbservhisttemp=$dbserventry->history;},
    -justify=>'center',
    )->pack(
@@ -521,7 +524,7 @@ $dbuserentry=$userhistframe->HistEntry(
    -width=>$tophistentrywidth,
    -limit=>$histlimit,  
    -dup=>0,
-   -match => 1,  
+   -match=>0,  
    -justify=>'center',
    -command=>sub{@dbuserhisttemp=$dbuserentry->history;},
    )->pack(  
@@ -570,8 +573,9 @@ $dbpassentry=$passhistframe->HistEntry(
    -width=>$tophistentrywidth,
    -limit=>$histlimit,  
    -dup=>0,
-   -match => 1,  
+   -match=>0,  
    -justify=>'center',
+   -show => '#',
    -command=>sub{@dbpasshisttemp=$dbpassentry->history;},
    )->pack(
       -expand=>0,
@@ -620,7 +624,7 @@ $dbuseentry=$dbusehistframe->HistEntry(
    -limit=>$histlimit,  
    -justify=>'center',
    -dup=>0,
-   -match => 1,  
+   -match=>0,  
    -command=>sub{@dbusehisttemp=$dbuseentry->history;},
    )->pack(
       -expand=>0,
@@ -783,7 +787,7 @@ $coldata=$labelent8->Frame(
       );
 
 $rownumlabel=$rowdata->Label(
-   -text=>'Rows:',
+   -text=>' Rows:',
    -foreground=>$rowcolcolor,
    -justify=>'right'
    )->pack(
@@ -806,7 +810,7 @@ $rowdata->Label(
       );
 
 $colnumlabel=$coldata->Label(
-   -text=>'Cols:',
+   -text=>' Cols:',
    -foreground=>$rowcolcolor,
    -justify=>'right'
    )->pack(
@@ -831,15 +835,16 @@ $coldata->Label(
 
 
 
-#create the circle button to show the active status
-#$canvas->createOval(x1, y1, x2, y2, ?option, value, option, value, ...?)
-$busymarker->createOval(3,15,15,3, 
-   -tags=>'circle',
-   -outline=>'grey40',
-   -fill=>$unbusycolor,
-   -width=>1,
-   );
-    
+# #create the circle button to show the active status
+# #$canvas->createOval(x1, y1, x2, y2, ?option, value, option, value, ...?)
+# #$busymarker->createOval(3,15,15,3, 
+# $busymarker->createOval(3,35,15,3, 
+#    -tags=>'circle',
+#    -outline=>'grey40',
+#    -fill=>$unbusycolor,
+#    -width=>1,
+#    );
+#     
 ##############################################
 #query strings
 
@@ -1375,7 +1380,7 @@ sub clone_data {
    #The main clone window
    $CW=new MainWindow(-title=>"Cloned Data - $clonedate");
    #set a minimum size so the window cant be resized down to mess up the cancel button
-   $CW->minsize(950,220);
+   #$CW->minsize(850,220);
    #The top frame for the text
    $cloneframe1=$CW->Frame(
       -borderwidth=>'0',
@@ -1433,7 +1438,7 @@ sub clone_data {
       -selectbackground=>'#c0d0c0',
       -wrap=>'none',  
       -height=>2,
-      -width=>122,
+      -width=>102,
       )->pack(
          -fill=>'x',
          -expand=>0,
@@ -1452,7 +1457,7 @@ sub clone_data {
       -borderwidth=>1, 
       -wrap=>'none',
       -height=>10,
-      -width=>122,
+      -width=>102,
       -exportselection=>1,
       )->pack(
          -expand=>1,
@@ -1463,7 +1468,7 @@ sub clone_data {
    $hscrollx->configure(-command=>\&my_clonexscroll);
 
    $cloneframe2->Label(
-      -text=>'R:',
+      -text=>'Rows:',
       -borderwidth=>1,
       -background=>$background,
       -foreground=>$rowcolcolor,
@@ -1489,7 +1494,7 @@ sub clone_data {
          );
 
    $cloneframe2->Label(
-      -text=>' C:',
+      -text=>' Cols:',
       -borderwidth=>1,
       -background=>$background,
       -foreground=>$rowcolcolor,
@@ -1515,7 +1520,7 @@ sub clone_data {
          );
 
    $cloneframe2->Label(
-      -text=>' Server:',
+      -text=>'Server:',
       -borderwidth=>1,
       -background=>$background,
       -foreground=>$rowcolcolor,
@@ -1541,7 +1546,7 @@ sub clone_data {
          );
 
    $cloneframe2->Label(
-      -text=>' Database:',
+      -text=>'Database:',
       -borderwidth=>1,
       -background=>$background,
       -foreground=>$rowcolcolor,
@@ -1567,7 +1572,7 @@ sub clone_data {
          );
 
    $cloneframe2->Label(
-      -text=>' Max Rows:',
+      -text=>'Max Rows:',
       -borderwidth=>1,
       -background=>$background,
       -foreground=>$rowcolcolor,
@@ -1595,7 +1600,7 @@ sub clone_data {
    $cloneframe2->Button(
       -text=>'Cancel',
       -borderwidth=>1,
-      -width=>7,
+      -width=>6,
       -background=>$buttonbackground,
       -foreground=>$txtforeground,
       -highlightthickness=>0,
@@ -1604,14 +1609,14 @@ sub clone_data {
       )->pack(
          -expand=>0,
          -side=>'right',
-         -padx=>1,
+         -padx=>0,
          -pady=>2,
          );
          
    $clonesavebutton=$cloneframe2->Button(
       -text=>'Save',
       -borderwidth=>1,
-      -width=>7,
+      -width=>6,
       -background=>$buttonbackground,
       -foreground=>$txtforeground,
       -highlightthickness=>0,
@@ -1625,13 +1630,13 @@ sub clone_data {
          );
 
   $cldbcmd=$cloneframe2->Menubutton(
-      -text=>' Command',
+      -text=>'Command',
       -relief=>'raised',
-      -indicatoron=>1,
+      -indicatoron=>0,
       -borderwidth=>1,
       -background=>$buttonbackground,
       -highlightthickness=>0,
-      -width=>6,
+      -width=>8,
       -tearoff=>0,
       -font=>$winfont,
       )->pack(
@@ -1904,7 +1909,7 @@ sub run_query {
          #push the final strings onto the dbretrows array 
          push(@dbretrows,"$dbrowstring\n");
          }#while (@dbdata=$dbh->dbnextrow)
-   }
+   }#while data is being returned from the server $dbh->dbresults != NO_MORE_RESULTS)
    #now all of the DB returned data has been collected, close the connection
    $dbh->dbclose;
    push(@dbretrows,"\n");
@@ -1958,13 +1963,15 @@ sub run_isql_cmd {
 
 #set the busy LED to red  
 sub setbusy {
-   $busymarker->itemconfigure('circle',-fill=>$busycolor,-outline=>'black');
+   $busymarker->configure(-background=>$busycolor);
+   #$busymarker->itemconfigure('circle',-fill=>$busycolor,-outline=>'black');
    $LW->update;
    }
 
 #return the busy LED to green
 sub setunbusy {
-   $busymarker->itemconfigure('circle',-fill=>$unbusycolor,-outline=>'grey40');
+   $busymarker->configure(-background=>$unbusycolor);
+   #$busymarker->itemconfigure('circle',-fill=>$unbusycolor,-outline=>'grey40');
    $LW->update;
    }  
 
@@ -2167,7 +2174,6 @@ sub clone_savit {
    close outfile;
    }#sub clone_savit
 
-
 sub printit {
    &savit("/tmp/dbgui.prt"); 
    $p=$LW->PrintDialog(
@@ -2329,8 +2335,7 @@ sub message_handler {
    #(like when sp_helpcode is executed)
    if ($message == 0) {
       return if ($dbtext =~/^Message empty/);
-      push(@dbretrows,"$dbtext\n");
-      $skipsort=1;
+      $queryout->insert('end',"$dbtext\n");
       }
    0;
 }#sub message_handler
