@@ -14,6 +14,8 @@ DESCRIPTION
 
         Sort (normal, numerical and reverse) on any column of the SQL results.
 
+        Sum up the numeric values in the sorted column
+        
         Print the SQL results to a printer.
 
         Quick command line clear and restore for easy command line generation/pasting.
@@ -177,6 +179,9 @@ Sort: menubutton - This lets the user select a column to sort by.  A "hidden" fe
 Rev radiobutton - Sets the sort to be a reverse sort.
 
 Num radiobutton - Sets the sort to be a numeric sort.
+
+Sum button - Attempts to sum up all of the values in the sorted column and display the results.
+   If non-numeric data is encountered "N/A" is displayed for the total.
 
 Exec button - Executes the current sql command.
 
