@@ -166,20 +166,29 @@ Exit button - Terminates the application and records the current configuration t
 
 
 -------
-The dbgui archive contains this file, the dbgui.pl script and a PrintDialog.pm perl 
+
+The DBGUI archive contains this file, the dbgui.pl script and a PrintDialog.pm perl 
 module which is used to send the sql results to a printer.   Until this module is uploaded
 to CPAN, (hopefully soon) I will include it in this archive.
+
+Note - the PrintDialog.pm file has been renamed in this archive to PrintDialog.module
+to prevent PAUSE automatic processing from posting PrintDialog as one of my own modules.
+This file merely needs to be renamed to PrintDialog.pm and installed on your system.
 
 
 -------
 
 Thats pretty much it...
 
-I hope you like DBgui.  I use it every day... It has made my life a lot easier..
+I hope you like DBGUI.  I use it every day... It has made my life a lot easier..
 
-DBGUI is featured on my homepage - http://www.flash.net/~monty4  as well as other
-Perl and Perl/TK programs I have written.  I can be contacted via my webpage or
-at Monty4@flash.net.
+DBGUI can be fetched from your local CPAN site - 
+   $CPAN/authors/id/M/MS/MSCROGGIN 
+or my home page - 
+   http://www.flash.net/~monty4/
+
+I can be contacted via my webpage or at 
+   Monty4@flash.net.
 
 Ciao
 

@@ -51,10 +51,13 @@
 ## Wed Jun 9 12:11:05 CDT 1999  Added the small change to display pound symbols instead of the
 ##     actual text for the password entry.  Changed the busy indicator to a simple colored frame
 ##     for simplicity.
+##
+## Wed Jun 16 17:54:50 CDT 1999  Made some minor - mostly cosmetic changes.  Fixed a bug where
+##     the sql command was being printed twice in a save file.  
 ################################################################################
 
 #the current version
-local $VERSION="1.6.4";
+local $VERSION="1.6.5";
 
 =head1 NAME
 
@@ -168,9 +171,8 @@ local $ypad=4;
 local $busy="Ready";
 local $busycolor="red2",
 local $unbusycolor='#009f00',
-local $columns=40;
 local $savedialogcolor="#caC2BBBBA7A7";
-local $histlimit=60;
+local $histlimit=100;
 
 #the path to the isql binary
 local $isqlbinary="/net/pvcsserv01/sft/sybase/bin/isql";
@@ -486,7 +488,7 @@ $dbserventry=$servhistframe->HistEntry(
       -fill=>'x',
       );
 
-$dbserventry->bind('<Return>'    => sub { &check_cmd }); 
+$dbserventry->bind('<Return>'    => \&check_cmd); 
 $dbserventry->bind('<Up>'        => sub { $dbserventry->historyUp });
 $dbserventry->bind('<Control-p>' => sub { $dbserventry->historyUp });
 $dbserventry->bind('<Down>'      => sub { $dbserventry->historyDown });
@@ -534,7 +536,7 @@ $dbuserentry=$userhistframe->HistEntry(
       -fill=>'x',
       );
 
-$dbuserentry->bind('<Return>'    => sub { &check_cmd }); 
+$dbuserentry->bind('<Return>'    => \&check_cmd); 
 $dbuserentry->bind('<Up>'        => sub { $dbuserentry->historyUp });
 $dbuserentry->bind('<Control-p>' => sub { $dbuserentry->historyUp });
 $dbuserentry->bind('<Down>'      => sub { $dbuserentry->historyDown });
@@ -584,7 +586,7 @@ $dbpassentry=$passhistframe->HistEntry(
       -fill=>'x',
       );
     
-$dbpassentry->bind('<Return>'    => sub { &check_cmd }); 
+$dbpassentry->bind('<Return>'    => \&check_cmd); 
 $dbpassentry->bind('<Up>'        => sub { $dbpassentry->historyUp });
 $dbpassentry->bind('<Control-p>' => sub { $dbpassentry->historyUp });
 $dbpassentry->bind('<Down>'      => sub { $dbpassentry->historyDown });
@@ -633,7 +635,7 @@ $dbuseentry=$dbusehistframe->HistEntry(
       -fill=>'x',
       );
       
-$dbuseentry->bind('<Return>'    => sub { &check_cmd }); 
+$dbuseentry->bind('<Return>'    => \&check_cmd); 
 $dbuseentry->bind('<Up>'        => sub { $dbuseentry->historyUp });
 $dbuseentry->bind('<Control-p>' => sub { $dbuseentry->historyUp });
 $dbuseentry->bind('<Down>'      => sub { $dbuseentry->historyDown });
@@ -666,7 +668,7 @@ $maxrowentry=$labelent5->Entry(
       -fill=>'y',
       );
     
-$maxrowentry->bind('<Return>'=> sub { &check_cmd }); 
+$maxrowentry->bind('<Return>'=>\&check_cmd); 
 
 $labelent6->Label(
    -text=>'Snapshot',
@@ -709,7 +711,7 @@ $snapscale=$labelent6->Scale(
       -pady=>0,
       -fill=>'y', 
       );
-$snapscale->bind('<Return>'=> sub { &check_cmd }); 
+$snapscale->bind('<Return>'=> \&check_cmd); 
 
 $labelent7->Label(
    -text=>'Method',
@@ -911,7 +913,7 @@ $qsentry1=$qs1frame->HistEntry(
       -pady=>1,
       );
 
-$qsentry1->bind('<Return>'    => sub { &check_cmd }); 
+$qsentry1->bind('<Return>'    => \&check_cmd); 
 $qsentry1->bind('<Up>'        => sub { $qsentry1->historyUp });
 $qsentry1->bind('<Control-p>' => sub { $qsentry1->historyUp });
 $qsentry1->bind('<Down>'      => sub { $qsentry1->historyDown });
@@ -980,7 +982,7 @@ $qsentry2=$qs2frame->HistEntry(
       -pady=>1,
       );
     
-$qsentry2->bind('<Return>'    => sub { &check_cmd }); 
+$qsentry2->bind('<Return>'    => \&check_cmd); 
 $qsentry2->bind('<Up>'        => sub { $qsentry2->historyUp });
 $qsentry2->bind('<Control-p>' => sub { $qsentry2->historyUp });
 $qsentry2->bind('<Down>'      => sub { $qsentry2->historyDown });
@@ -1048,7 +1050,7 @@ $qsentry3=$qs3frame->HistEntry(
       -pady=>1,
       );
     
-$qsentry3->bind('<Return>'    => sub { &check_cmd }); 
+$qsentry3->bind('<Return>'    => \&check_cmd); 
 $qsentry3->bind('<Up>'        => sub { $qsentry3->historyUp });
 $qsentry3->bind('<Control-p>' => sub { $qsentry3->historyUp });
 $qsentry3->bind('<Down>'      => sub { $qsentry3->historyDown });
@@ -1151,7 +1153,7 @@ $sortlabel=$sortframe->Label(
 $sortbyentry=$sortframe->Optionmenu(
    -background=>$buttonbackground,
    -width=>24,
-   -command=>sub{&sortby;},
+   -command=>\&sortby,
    )->pack(
       -side=>'left',
       -expand=>1,
@@ -1169,7 +1171,7 @@ $revsortbutton=$sortframe->Checkbutton(
    -width=>4,
    -offvalue=>0,
    -onvalue=>1,
-   -command=>sub{&sortby},
+   -command=>\&sortby,
    )->pack(
       -side=>'left',
       -expand=>0,
@@ -1187,7 +1189,7 @@ $numsortbutton=$sortframe->Checkbutton(
    -width=>4,
    -offvalue=>0,
    -onvalue=>1,
-   -command=>sub{&sortby},
+   -command=>\&sortby,
    )->pack(
       -side=>'left',
       -expand=>0,
@@ -1221,7 +1223,7 @@ $buttonframe->Frame(
 $buttonframe->Button(
    -text=>'Exit',
    -width=>$buttonwidth,
-   -command=>sub{&save_exit;},
+   -command=>\&save_exit,
    )->pack(
       -side=>'right',
       -padx=>0,
@@ -1231,7 +1233,7 @@ $buttonframe->Button(
 $buttonframe->Button(
    -text=>'Search',
    -width=>$buttonwidth,
-   -command=>sub{&searchit;},
+   -command=>\&searchit,
    )->pack(
       -side=>'right',
       -padx=>1,
@@ -1241,7 +1243,7 @@ $buttonframe->Button(
 $printbutton=$buttonframe->Button(
    -text=>'Print',
    -width=>$buttonwidth,
-   -command=>sub{&printit;},
+   -command=>\&printit,
    )->pack(
       -side=>'right',
       -padx=>0,
@@ -1261,7 +1263,7 @@ $savebutton=$buttonframe->Button(
 $typesbutton=$buttonframe->Button(
    -text=>'DTypes',
    -width=>$buttonwidth,
-   -command=>sub{&getdatatypes;},
+   -command=>\&getdatatypes,
    )->pack(
       -side=>'right',
       -padx=>0,
@@ -1271,7 +1273,7 @@ $typesbutton=$buttonframe->Button(
 $typesbutton=$buttonframe->Button(
    -text=>'Clone',
    -width=>$buttonwidth,
-   -command=>sub{&clone_data;},
+   -command=>\&clone_data,
    )->pack(
       -side=>'right',
       -padx=>0,
@@ -1322,7 +1324,7 @@ $querybutton=$buttonframe->Button(
    -text=>'Exec',
    -width=>$buttonwidth,
    -foreground=>'red4',
-   -command=>sub{&check_cmd;},
+   -command=>\&check_cmd,
    )->pack(
       -side=>'right',
       -padx=>0,
@@ -1677,7 +1679,7 @@ sub clone_data {
    #scroll the window to display the same lines as the original window
    $clonewin->xview(moveto=>$clscrollx);
    $clonewin->yview(moveto=>$clscrolly);
-}#sub
+}#sub clone
    
 #tie two text widgets (header and data) to scroll horizontally together
 sub my_xscroll {
@@ -1818,6 +1820,9 @@ sub run_query {
       for($i=1;$i<=$dbcolcount;++$i) {
          #ask sybase for the name of each column
          $colheader=$dbh->dbcolname($i);
+         if ($colheader eq "") {
+            $colheader="<Func>";
+            }
          $coltype=$dbh->dbcoltype($i);
          #push the column name onto the sortby popup
          push(@sortbyhist,$colheader);
@@ -2098,7 +2103,6 @@ sub savit {
          print outfile " Query String - ${$_}";
          }
       }#foreach
-   print outfile " Query String - $savsqlstring";
    print outfile "Rows Returned - $dbrowcount";
    print outfile "Cols Returned - $dbcolcount\n";
    print outfile "Returned Data:\n";
@@ -2142,19 +2146,13 @@ sub clone_savit {
    return if ($cloneoutfile eq "");
    }
    $date=`date`;
-   open(outfile, ">$cloneoutfile") || die "Can't open save file :$outfile";
-   print outfile "\nCloned Data Report created $date";
-   print outfile "Query Data:";
-   local $tempclserver=$clserver->cget(-text);
-   print outfile "  Server Name - $tempclserver"; 
-   local $tempcldbuse=$cldbuse->cget(-text);
-   print outfile "Database Name - $tempcldbuse"; 
-   local $tempclmaxrows=$clmaxrows->cget(-text);
-   print outfile "Max Row Count - $tempclmaxrows";
-   local $tempclretrows=$clrowcount->cget(-text);
-   print outfile "Rows Returned - $tempclretrows";
-   local $tempclretcols=$clcolcount->cget(-text);
-   print outfile "Cols Returned - $tempclretcols\n";
+   open(outfile, ">$cloneoutfile") || die "Can't open save file :$cloneoutfile";
+   print  outfile "\nCloned Data Report created $date\n\nQuery Data:";
+   printf outfile "  Server Name - %20s\n",$clserver->cget(-text);
+   printf outfile "Database Name - %20s\n",$cldbuse->cget(-text); 
+   printf outfile "Max Row Count - %20s\n",$clmaxrows->cget(-text);
+   printf outfile "Rows Returned - %20s\n",$clrowcount->cget(-text);
+   printf outfile "Cols Returned - %20s\n\n",$clcolcount->cget(-text);
    local $mytempcmd=$cldbcmd->entrycget('end',-label);
    print outfile "DBCmd - $mytempcmd"; 
    print outfile "\nReturned Data:\n";  
@@ -2471,7 +2469,7 @@ sub searchit {
          );
 
    #press enter and perform a single fine
-   $ssentry->bind('<Return>'    =>sub  { &find_one; });
+   $ssentry->bind('<Return>'    => \&find_one);
    $ssentry->bind('<Up>'        => sub { $ssentry->historyUp });
    $ssentry->bind('<Control-p>' => sub { $ssentry->historyUp });
    $ssentry->bind('<Down>'      => sub { $ssentry->historyDown });
@@ -2486,7 +2484,7 @@ sub searchit {
       -foreground=>$txtforeground,
       -highlightthickness=>0,
       -font=>$winfont,
-      -command=>sub {&find_one;},
+      -command=>\&find_one,
       )->pack(
          -side=>'left',
          -padx=>2,
@@ -2500,7 +2498,7 @@ sub searchit {
       -foreground=>$txtforeground,
       -highlightthickness=>0,
       -font=>$winfont,
-      -command=>sub {&find_all;},
+      -command=>\&find_all,
       )->pack(
          -side=>'left',
          -padx=>2,
